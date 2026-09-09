@@ -68,6 +68,7 @@ public sealed class LogOut
     {
         Seq = seq; Text = text; Tier = tier; X = x; Y = y; Kind = kind; Stealth = stealth;
     }
+    public string Type => "log";
     public long Seq { get; }
     public string Text { get; }
     public int Tier { get; }
@@ -155,8 +156,17 @@ public sealed class CellOut
     public int Tier { get; init; }
     public List<string> Occupants { get; init; } = new();
     public List<string> Items { get; init; } = new();
+    public List<ItemRefOut> Interactables { get; init; } = new();
     public bool Burning { get; init; }
     public bool Smoky { get; init; }
+}
+
+public sealed class ItemRefOut
+{
+    public long Id { get; init; }
+    public string Label { get; init; } = "";
+    public string Kind { get; init; } = "";
+    public bool HasCard { get; init; }
 }
 
 public sealed class CheckResultOut

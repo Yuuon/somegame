@@ -1,0 +1,374 @@
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const screens = {
+    lobby: $('screen-lobby'),
+    wait: $('screen-lobby-wait'),
+    game: $('screen-game'),
+  };
+  const state = {
+    ws: null,
+    seat: -1,
+    view: null,
+    objective: '',
+    logs: [],
+    myRole: '',
+    myColor: '',
+    host: false,
+    pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
+    busy: false,
+  };
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/ws`);
+    state.ws = ws;
+    ws.onmessage = (ev) => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
+    ws.onclose = () => { $('overlay-box').innerHTML = '<h2>连接断开</h2><p>请刷新页面重试。</p>'; showOverlay(); };
+  }
+
+  function send(obj) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj)); }
+
+  function show(screen) { Object.values(screens).forEach(s => s.style.display = 'none'); screens[screen].style.display = ''; }
+
+  function showOverlay() { $('overlay').style.display = 'flex'; }
+  function hideOverlay() { $('overlay').style.display = 'none'; }
+
+  function handle(msg) {
+    switch (msg.type) {
+      case 'lobby':
+        state.host = msg.isHost;
+        renderLobby(msg);
+        show('wait');
+        break;
+      case 'info':
+        appendLog({ text: msg.text, kind: 'info', tier: 0 });
+        break;
+      case 'objective':
+        state.objective = msg.text;
+        break;
+      case 'log':
+        appendLog(msg);
+        break;
+      case 'phase':
+        appendLog({ text: msg.text, kind: 'phase', tier: 0 });
+        break;
+      case 'view':
+        state.view = msg;
+        state.seat = msg.seat;
+        state.myRole = msg.role;
+        state.myColor = msg.roleColor;
+        if (msg.objective) state.objective = msg.objective;
+        render();
+        break;
+      case 'checkresult':
+        appendLog({
+          text: `查验「${msg.targetCode}」：${msg.identity}${msg.enemy ? '（敌对）' : ''}${msg.rangeOk ? '（在交战范围内）' : '（超出交战范围）'}${msg.note ? '；' + msg.note : ''}`,
+          kind: 'info', tier: 0,
+        });
+        if (msg.enemy && msg.canBattle) {
+          appendLog({ text: '对方是敌对身份，是否发起战斗？', kind: 'info', tier: 0 });
+        }
+        break;
+      case 'gameover':
+        renderGameOver(msg);
+        break;
+    }
+  }
+
+  function appendLog(m) {
+    const el = document.createElement('div');
+    el.className = 't' + (m.tier ?? 0) + (m.kind ? ' ' + m.kind : '');
+    el.textContent = m.text;
+    const box = $('logs');
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+    if (box.childNodes.length > 500) box.removeChild(box.firstChild);
+  }
+
+  // ---------------- 大厅 ----------------
+  function renderLobby(msg) {
+    $('lobby-room').textContent = msg.roomId;
+    const box = $('lobby-seats');
+    box.innerHTML = '';
+    msg.seats.forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'seat-row';
+      row.textContent = `${s.seat + 1} 号位：${s.name}${s.bot ? '（机器人）' : ''}`;
+      box.appendChild(row);
+    });
+    $('lobby-hint').textContent = state.host ? '你是房主，可随时开始（空位自动补机器人）。' : `邀请码：${msg.roomId}，等待房主开始…`;
+    $('btn-start').style.display = state.host ? '' : 'none';
+  }
+
+  // ---------------- 对局渲染 ----------------
+  function render() {
+    const v = state.view;
+    if (!v) return;
+    $('s-round').textContent = v.round;
+    $('s-stage').textContent = stageText(v.stage);
+    $('s-hp').textContent = v.hp;
+    $('s-ap').textContent = v.ap;
+    $('s-countdown').textContent = v.protectedCountdown;
+    $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
+    $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
+    renderBoard(v);
+    renderHand(v);
+    renderActions(v);
+    renderBattle(v);
+  }
+
+  function stageText(s) {
+    return { Free: '自由行动', Check: '身份查验', Battle: '战斗', Terminal: '已结束', Idle: '—' }[s] || s;
+  }
+
+  function renderBoard(v) {
+    const board = $('board');
+    const cells = v.cells || [];
+    const maxX = Math.max(...cells.map(c => c.x), 0);
+    const maxY = Math.max(...cells.map(c => c.y), 0);
+    board.style.gridTemplateColumns = `repeat(${maxX + 1}, 44px)`;
+    board.innerHTML = '';
+    const byKey = {};
+    cells.forEach(c => byKey[c.x + ',' + c.y] = c);
+    for (let y = 0; y <= maxY; y++) for (let x = 0; x <= maxX; x++) {
+      const c = byKey[x + ',' + y];
+      const div = document.createElement('div');
+      if (!c) { div.className = 'cell'; board.appendChild(div); continue; }
+      div.className = 'cell tier' + c.tier + (x === v.x && y === v.y ? ' me' : '') +
+        (x === v.extractionX && y === v.extractionY ? ' extraction' : '') +
+        (c.burning ? ' burning' : '') + (c.smoky ? ' smoky' : '');
+      if (x === v.extractionX && y === v.extractionY) {
+        const t = document.createElement('span');
+        t.className = 'who';
+        t.textContent = '★撤离点';
+        div.appendChild(t);
+      }
+      if (c.occupants.length) {
+        const t = document.createElement('span');
+        t.className = 'who';
+        t.textContent = c.occupants.join(' ');
+        div.appendChild(t);
+      }
+      (c.items || []).forEach(it => {
+        const s = document.createElement('span');
+        s.className = 'item';
+        s.textContent = it;
+        div.appendChild(s);
+      });
+      const clickable = cellClickable(c, v);
+      if (clickable) {
+        div.classList.add('clickable');
+        div.onclick = () => onCellClick(x, y, c);
+      }
+      board.appendChild(div);
+    }
+  }
+
+  function cellClickable(c, v) {
+    if (state.pending) return true;
+    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
+      const d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
+      return d >= 1 && d <= 3;
+    }
+    return false;
+  }
+
+  function onCellClick(x, y, cell) {
+    const v = state.view;
+    if (!v) return;
+    if (state.pending) {
+      const p = state.pending;
+      if (p.kind === 'checkCard') {
+        send({ t: 'cmd', op: 'card', cardId: p.cardId, x, y });
+        state.pending = null;
+        return;
+      }
+      if (p.kind === 'freeCard') {
+        send({ t: 'cmd', op: 'card', cardId: p.cardId, x, y });
+        state.pending = null;
+        return;
+      }
+      return;
+    }
+    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
+      send({ t: 'cmd', op: 'move', x, y });
+    }
+  }
+
+  function occupantClick(code) {
+    const v = state.view;
+    if (!v) return;
+    if (state.pending) {
+      const p = state.pending;
+      if (p.kind === 'checkCard' && p.defId === 'heal') {
+        send({ t: 'cmd', op: 'card', cardId: p.cardId, target: code });
+        state.pending = null;
+        return;
+      }
+      if (p.kind === 'freeCard') {
+        send({ t: 'cmd', op: 'card', cardId: p.cardId, target: code });
+        state.pending = null;
+        return;
+      }
+    }
+    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
+      send({ t: 'cmd', op: 'talk', target: code });
+    } else if (v.awaitKind === 'CheckAction' && v.yourTurn) {
+      send({ t: 'cmd', op: 'check', target: code });
+    }
+  }
+
+  function itemClick(item, action) {
+    const v = state.view;
+    if (state.pending) {
+      const p = state.pending;
+      if (p.kind === 'freeCard' && p.defId === 'glue') {
+        send({ t: 'cmd', op: 'card', cardId: p.cardId, itemId: item.id });
+        state.pending = null;
+        return;
+      }
+    }
+    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
+      send({ t: 'cmd', op: action, itemId: item.id });
+    }
+  }
+
+  function renderHand(v) {
+    const box = $('hand');
+    box.innerHTML = '';
+    (v.hand || []).forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'card' + (c.temp ? ' temp' : '') + (c.usable ? ' usable' : '');
+      el.textContent = c.name + (c.temp ? '（临）' : '');
+      if (c.usable) {
+        el.onclick = () => onCardClick(c);
+        if (state.pending && state.pending.cardId === c.id) el.classList.add('pending');
+      }
+      box.appendChild(el);
+    });
+  }
+
+  function targetOf(defId) {
+    if (['heal', 'mimic', 'dye'].includes(defId)) return 'actor';
+    if (defId === 'glue') return 'item';
+    if (['drone', 'molotov', 'track'].includes(defId)) return 'cell';
+    return 'self';
+  }
+
+  function onCardClick(card) {
+    const v = state.view;
+    if (!v || !v.yourTurn) return;
+    const defId = card.defId;
+    if (v.awaitKind === 'BattleAction') {
+      send({ t: 'cmd', action: 'play', cardId: card.id });
+      return;
+    }
+    if (v.awaitKind === 'BattleDefense') {
+      send({ t: 'cmd', dodge: true, cardId: card.id });
+      return;
+    }
+    const kind = v.awaitKind === 'CheckAction' ? 'checkCard' : 'freeCard';
+    const tgt = targetOf(defId);
+    if (tgt === 'self') {
+      send({ t: 'cmd', op: 'card', cardId: card.id });
+    } else {
+      state.pending = { kind, cardId: card.id, defId };
+      appendLog({ text: `请选择目标${tgt === 'cell' ? '（点击地图格子）' : tgt === 'item' ? '（点击本格物品）' : '（点击同格角色）'}`, kind: 'info', tier: 0 });
+    }
+    render();
+  }
+
+  function renderActions(v) {
+    const box = $('actions');
+    box.innerHTML = '';
+    if (!v.yourTurn) {
+      const s = document.createElement('span');
+      s.className = 'hint';
+      s.textContent = '等待其他玩家…';
+      box.appendChild(s);
+      return;
+    }
+    const btn = (label, cls, fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = cls || '';
+      b.onclick = fn;
+      box.appendChild(b);
+    };
+
+    if (v.awaitKind === 'FreeAction') {
+      btn('移动（1-3格）', '', () => appendLog({ text: '请点击目标格子（直线距离 1-3 格）。', kind: 'info', tier: 0 }));
+      btn('探查', '', () => send({ t: 'cmd', op: 'inspect' }));
+      btn('交谈', '', () => appendLog({ text: '请点击同格角色。', kind: 'info', tier: 0 }));
+      const me = v.cells.find(c => c.x === v.x && c.y === v.y);
+      if (me) {
+        me.interactables.forEach(it => {
+          if (it.kind === 'Chest') btn(it.label + (it.hasCard ? '（可取卡）' : ''), '', () => itemClick(it, 'open'));
+          if (it.kind === 'Medkit') btn('使用医疗包(+1HP)', '', () => itemClick(it, 'medkit'));
+        });
+      }
+      if (state.myRole === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
+      btn('结束本轮行动', 'primary', () => send({ t: 'cmd', op: 'finish' }));
+      if (state.pending && state.pending.kind === 'freeCard') {
+        const cancel = document.createElement('button');
+        cancel.textContent = '取消选择';
+        cancel.onclick = () => { state.pending = null; render(); };
+        box.appendChild(cancel);
+      }
+    } else if (v.awaitKind === 'CheckAction') {
+      btn('跳过', '', () => send({ t: 'cmd', op: 'skip' }));
+      btn('查验（点击可见角色或输入代号）', '', () => appendLog({ text: '请点击一个角色代号以查验。', kind: 'info', tier: 0 }));
+      const input = document.createElement('input');
+      input.placeholder = '远处目标代号';
+      const go = document.createElement('button');
+      go.textContent = '查验';
+      go.onclick = () => { if (input.value) send({ t: 'cmd', op: 'check', target: input.value }); };
+      box.appendChild(input);
+      box.appendChild(go);
+    } else if (v.awaitKind === 'CheckConfirm') {
+      btn('发起战斗', 'primary', () => send({ t: 'cmd', startBattle: true }));
+      btn('不开战', '', () => send({ t: 'cmd', startBattle: false }));
+    } else if (v.awaitKind === 'BattleAction') {
+      btn('放弃（连续两次放弃则中止战斗）', '', () => send({ t: 'cmd', action: 'pass' }));
+    } else if (v.awaitKind === 'BattleDefense') {
+      btn('承受这次攻击', '', () => send({ t: 'cmd', dodge: false }));
+      const dodge = (v.hand || []).find(c => c.defId === 'dodge');
+      if (dodge) btn('使用闪避', 'primary', () => send({ t: 'cmd', dodge: true, cardId: dodge.id }));
+    }
+  }
+
+  function renderBattle(v) {
+    const panel = $('battle-panel');
+    if (v.inBattle) {
+      panel.style.display = '';
+      panel.textContent = v.battlePrompt;
+    } else panel.style.display = 'none';
+  }
+
+  function renderGameOver(g) {
+    const box = $('overlay-box');
+    let html = `<h2>对局结束</h2><p class="hint">${g.reason}</p><ul>`;
+    g.results.forEach(r => {
+      html += `<li>${r.name} ${r.bot ? '（机器人）' : ''} = ${r.role}${r.color ? `（${r.color}案）` : ''} — <b>${r.win ? '胜利' : '失败'}</b></li>`;
+    });
+    html += '</ul><h3>全场身份</h3><p>' + g.reveal.join('；') + '</p>';
+    html += '<p><button id="btn-again" class="primary">返回首页</button></p>';
+    box.innerHTML = html;
+    showOverlay();
+    document.getElementById('btn-again').onclick = () => location.reload();
+  }
+
+  $('btn-create').onclick = () => send({
+    t: 'create',
+    playerName: $('create-name').value || '房主',
+    players: parseInt($('create-players').value, 10),
+  });
+  $('btn-join').onclick = () => send({
+    t: 'join',
+    playerName: $('join-name').value || '玩家',
+    roomId: $('join-room').value.trim(),
+  });
+  $('btn-start').onclick = () => send({ t: 'start' });
+
+  connect();
+})();

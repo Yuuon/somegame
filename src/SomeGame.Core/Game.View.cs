@@ -31,8 +31,22 @@ public partial class Game
                 occList.Add($"{occ.Count}人");
 
             var itemList = new List<string>();
+            var interactables = new List<ItemRefOut>();
             if (tier == 0)
-                itemList.AddRange(ItemsAt(c).Select(i => i.Label));
+            {
+                foreach (var i in ItemsAt(c))
+                {
+                    itemList.Add(i.Label);
+                    if (i.Kind is ItemKind.Chest or ItemKind.Medkit)
+                        interactables.Add(new ItemRefOut
+                        {
+                            Id = i.Id,
+                            Label = i.Label,
+                            Kind = i.Kind.ToString(),
+                            HasCard = i.CardDefId.Length > 0,
+                        });
+                }
+            }
             else if (tier == 1 && ItemsAt(c).Count > 0)
                 itemList.Add("有物品");
 
@@ -41,6 +55,7 @@ public partial class Game
                 X = x, Y = y, Tier = tier,
                 Occupants = occList,
                 Items = itemList,
+                Interactables = interactables,
                 Burning = _burn.TryGetValue(c, out var bb) && bb > 0,
                 Smoky = _smoke.TryGetValue(c, out var ss) && ss > 0,
             });
