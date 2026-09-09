@@ -233,6 +233,7 @@ public partial class Game
             Identity = identity,
             Enemy = enemy,
             RangeOk = d <= 2,
+            CanBattle = enemy && d <= 2 && HasRangeAttack(verifier, d),
             Note = note,
         };
     }
