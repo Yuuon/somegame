@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "map": {
+    "width": 15,
+    "height": 15,
+    "coverItemCount": 8,
+    "medkitItemCount": 10,
+    "decoyNpcCount": 8,
+    "extractionAtCenter": true
+  },
+  "protectedNpcHp": 5,
+  "handSize": 5,
+  "turn": {
+    "apPerRound": 3,
+    "maxRounds": 120,
+    "refillMapEveryNRounds": 3,
+    "protectedStepPerRound": 1
+  },
+  "timersMs": {
+    "decisionMs": 60000
+  },
+  "roles": [
+    { "id": "bodyguard", "displayName": "保镖", "hp": 5, "supplyCard": null },
+    { "id": "killer", "displayName": "杀手", "hp": 3, "supplyCard": "gun_temp" },
+    { "id": "thief", "displayName": "小偷", "hp": 2, "supplyCard": "stealth_temp" },
+    { "id": "madman", "displayName": "疯子", "hp": 4, "supplyCard": "knife_temp" }
+  ],
+  "enemiesByRole": {
+    "bodyguard": ["killer", "thief", "madman"],
+    "killer": ["bodyguard", "madman"],
+    "thief": ["bodyguard", "madman"],
+    "madman": ["bodyguard", "killer", "thief"]
+  },
+  "seatPlans": [
+    {
+      "playerCount": 4,
+      "cases": [
+        { "caseIndex": 0, "color": "红", "roles": ["bodyguard", "killer", "thief"] }
+      ],
+      "madmen": ["madman"]
+    },
+    {
+      "playerCount": 8,
+      "cases": [
+        { "caseIndex": 0, "color": "红", "roles": ["bodyguard", "killer", "thief"] },
+        { "caseIndex": 1, "color": "蓝", "roles": ["bodyguard", "killer", "thief"] }
+      ],
+      "madmen": ["madman", "madman"]
+    }
+  ],
+  "cards": [
+    { "id": "gun", "name": "枪械攻击", "effect": "gun", "category": "attack", "phases": ["battle"], "target": "actor", "range": 2, "hideable": false },
+    { "id": "knife", "name": "刀械攻击", "effect": "knife", "category": "attack", "phases": ["battle"], "target": "actor", "range": 1, "hideable": false },
+    { "id": "dodge", "name": "闪避", "effect": "dodge", "category": "defense", "phases": ["battle"], "target": "self", "hideable": false },
+    { "id": "shield", "name": "防暴盾", "effect": "shield", "category": "defense", "phases": ["battle", "free", "check"], "target": "self", "hideable": false },
+    { "id": "stealth", "name": "隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "hideable": false },
+    { "id": "heal", "name": "治疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1 },
+    { "id": "aim", "name": "瞄准狙击", "effect": "aim", "category": "utility", "phases": ["free", "check", "battle"], "target": "self" },
+    { "id": "rapidfire", "name": "快速连射", "effect": "rapidfire", "category": "utility", "phases": ["free", "check", "battle"], "target": "self" },
+    { "id": "smoke", "name": "烟雾弹", "effect": "smoke", "category": "utility", "phases": ["free", "battle"], "target": "selfcell", "duration": 2 },
+    { "id": "energy", "name": "能量饮料", "effect": "energy", "category": "utility", "phases": ["free"], "target": "self", "value": 1 },
+    { "id": "stim", "name": "兴奋剂", "effect": "stim", "category": "utility", "phases": ["free", "check", "battle"], "target": "self" },
+    { "id": "ammopack", "name": "弹药包", "effect": "ammopack", "category": "utility", "phases": ["free", "check"], "target": "self", "count": 2, "genCard": "gun_temp" },
+    { "id": "bladepack", "name": "管制刀具", "effect": "bladepack", "category": "utility", "phases": ["free", "check"], "target": "self", "count": 2, "genCard": "knife_temp" },
+    { "id": "bug", "name": "窃听器", "effect": "bug", "category": "utility", "phases": ["free", "check"], "target": "self", "duration": 3 },
+    { "id": "drone", "name": "无人机探查", "effect": "drone", "category": "utility", "phases": ["free", "check"], "target": "cell" },
+    { "id": "disguise", "name": "身份伪装", "effect": "disguise", "category": "identity", "phases": ["check", "free"], "target": "self" },
+    { "id": "mimic", "name": "行动模仿", "effect": "mimic", "category": "identity", "phases": ["free", "check"], "target": "actor" },
+    { "id": "track", "name": "追踪探查", "effect": "track", "category": "identity", "phases": ["check"], "target": "cell" },
+    { "id": "dye", "name": "染色球", "effect": "dye", "category": "utility", "phases": ["free", "check"], "target": "actor" },
+    { "id": "molotov", "name": "燃烧瓶", "effect": "molotov", "category": "utility", "phases": ["free"], "target": "cell", "range": 2, "duration": 2 },
+    { "id": "glue", "name": "万能胶", "effect": "glue", "category": "utility", "phases": ["free"], "target": "selfcell" },
+    { "id": "gun_temp", "name": "临时枪械", "effect": "gun", "category": "attack", "phases": ["battle"], "target": "actor", "range": 2, "temp": true },
+    { "id": "knife_temp", "name": "临时刀械", "effect": "knife", "category": "attack", "phases": ["battle"], "target": "actor", "range": 1, "temp": true },
+    { "id": "stealth_temp", "name": "临时隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "temp": true }
+  ],
+  "deck": [
+    { "cardId": "gun", "count": 14 },
+    { "cardId": "knife", "count": 12 },
+    { "cardId": "dodge", "count": 12 },
+    { "cardId": "shield", "count": 4 },
+    { "cardId": "stim", "count": 4 },
+    { "cardId": "aim", "count": 3 },
+    { "cardId": "rapidfire", "count": 3 },
+    { "cardId": "stealth", "count": 6 },
+    { "cardId": "heal", "count": 6 },
+    { "cardId": "energy", "count": 4 },
+    { "cardId": "smoke", "count": 4 },
+    { "cardId": "bug", "count": 4 },
+    { "cardId": "drone", "count": 3 },
+    { "cardId": "ammopack", "count": 3 },
+    { "cardId": "bladepack", "count": 3 },
+    { "cardId": "disguise", "count": 3 },
+    { "cardId": "mimic", "count": 3 },
+    { "cardId": "track", "count": 3 },
+    { "cardId": "dye", "count": 2 },
+    { "cardId": "molotov", "count": 3 },
+    { "cardId": "glue", "count": 3 }
+  ]
+}
