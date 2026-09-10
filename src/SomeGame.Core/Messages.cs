@@ -130,6 +130,7 @@ public sealed class ViewOut
     public int Y { get; init; }
     public int ExtractionX { get; init; }
     public int ExtractionY { get; init; }
+    public bool ExtractionVisible { get; init; }
     public string MyCode { get; init; } = "";
     public string Role { get; init; } = "";
     public string RoleKey { get; init; } = "";
@@ -170,7 +171,6 @@ public sealed class ItemRefOut
     public long Id { get; init; }
     public string Label { get; init; } = "";
     public string Kind { get; init; } = "";
-    public bool HasCard { get; init; }
 }
 
 public sealed class CheckResultOut

@@ -27,9 +27,8 @@ public partial class Game
     {
         foreach (var id in _deck)
         {
-            var c = RandFreeCellNoItem();
-            _items.TryAdd(c, new List<Item>());
-            _items[c].Add(new Item { Id = ++_itemSeq, Kind = ItemKind.Chest, Pos = c, CardDefId = id });
+            var c = PickItemCell();
+            AddItem(new Item { Id = ++_itemSeq, Kind = ItemKind.Chest, Pos = c, CardDefId = id });
         }
         _deck.Clear();
     }
@@ -37,17 +36,32 @@ public partial class Game
     private void PlaceMedkitsAndCovers()
     {
         for (int i = 0; i < Cfg.Map.MedkitItemCount; i++)
-        {
-            var c = RandFreeCellNoItem();
-            _items.TryAdd(c, new List<Item>());
-            _items[c].Add(new Item { Id = ++_itemSeq, Kind = ItemKind.Medkit, Pos = c });
-        }
+            AddItem(new Item { Id = ++_itemSeq, Kind = ItemKind.Medkit, Pos = PickItemCell() });
         for (int i = 0; i < Cfg.Map.CoverItemCount; i++)
+            AddItem(new Item { Id = ++_itemSeq, Kind = ItemKind.Cover, Pos = PickItemCell() });
+    }
+
+    private void PlaceEmptyChests()
+    {
+        for (int i = 0; i < Cfg.Map.EmptyChestCount; i++)
+            AddItem(new Item { Id = ++_itemSeq, Kind = ItemKind.Chest, Pos = PickItemCell() });
+    }
+
+    private void AddItem(Item it)
+    {
+        _items.TryAdd(it.Pos, new List<Item>());
+        _items[it.Pos].Add(it);
+    }
+
+    // 允许一格多物：部分物品复用已有物品格
+    private CellPos PickItemCell()
+    {
+        if (_items.Count > 0 && Rng.Chance(0.4))
         {
-            var c = RandFreeCellNoItem();
-            _items.TryAdd(c, new List<Item>());
-            _items[c].Add(new Item { Id = ++_itemSeq, Kind = ItemKind.Cover, Pos = c });
+            var cell = _items.Keys.ElementAt(Rng.Next(0, _items.Count));
+            if (cell != Extraction) return cell;
         }
+        return RandFreeCellNoItem();
     }
 
     private CellPos RandFreeCellNoItem()
@@ -61,19 +75,27 @@ public partial class Game
         return new CellPos(Rng.Next(0, Width), Rng.Next(0, Height));
     }
 
-    private CellPos PlaceAtDistance(int d)
+    private CellPos PlaceProtectedAway()
     {
-        for (int t = 0; t < 300; t++)
+        for (int attempt = 0; attempt < 200; attempt++)
         {
             var c = new CellPos(Rng.Next(0, Width), Rng.Next(0, Height));
-            if (CellPos.Manhattan(c, Extraction) == d && !_items.ContainsKey(c)) return c;
+            if (CellPos.Manhattan(c, Extraction) >= 6 && !_items.ContainsKey(c)) return c;
         }
-        return RandFreeCellNoItem();
+        for (int d = 6; d <= Width + Height; d++)
+            for (int x = 0; x < Width; x++)
+            for (int y = 0; y < Height; y++)
+            {
+                var c = new CellPos(x, y);
+                if (CellPos.Manhattan(c, Extraction) == d && !_items.ContainsKey(c)) return c;
+            }
+        return new CellPos(0, 0) == Extraction ? new CellPos(1, 0) : new CellPos(0, 0);
     }
 
     private NpcActor SpawnProtectedNpc(int caseIdx, string color)
     {
-        var pos = PlaceAtDistance(Rng.Next(4, 8));
+        // 距撤离点必须 >5（第6格及以上），保证撤离时间窗充足
+        var pos = PlaceProtectedAway();
         return new NpcActor
         {
             Id = _nextActorId++,
@@ -85,7 +107,7 @@ public partial class Game
             CaseColor = color,
             ItemIntact = true,
             Extraction = Extraction,
-            LastOpText = "在赶路",
+            LastOpText = "在徘徊",
         };
     }
 

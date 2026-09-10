@@ -26,6 +26,8 @@ public sealed class PlayerActor : ActorNode
     public List<CardInstance> Hand { get; } = new();
     public int CarriedCase { get; set; } = -1; // 财宝所属案
     public int CoverTargetId { get; set; } = -1; // 保镖当前掩护的对象（每回合重置）
+    public HashSet<long> OpenedItems { get; } = new();   // 本人已开箱（知其空/满）
+    public HashSet<long> ReconMaybes { get; } = new();   // 探查标记"可能有东西"的物品
     public bool IsObserver => Dead;
     public bool PubliclyHostile { get; set; }
     public bool InspectedThisRound { get; set; }
@@ -37,6 +39,10 @@ public sealed class NpcActor : ActorNode
     public string CaseColor { get; set; } = ""; // ProtectedNpc 徽记颜色（公开线索）
     public bool ItemIntact { get; set; }        // ProtectedNpc: 财宝是否仍在
     public CellPos? Extraction { get; set; }
+    public bool Exposed { get; set; }           // 受保护NPC身份是否已被查验暴露
+    public bool Urged { get; set; }             // 本回合被保镖催促移动
+    public bool Evacuated { get; set; }         // 已从撤离点撤离
+    public int EvacWaitRounds { get; set; }     // 撤离点等待回合数
     public List<string> LastActionLog { get; } = new(); // 装饰用
 }
 

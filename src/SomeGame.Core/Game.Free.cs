@@ -101,7 +101,7 @@ public partial class Game
         var item = items.FirstOrDefault(i => i.Kind == ItemKind.Chest && (cmd.ItemId == null || cmd.ItemId == i.Id));
         if (item == null) { PushOut(p.SeatIndex, Msg("此格没有可开启的木箱。")); return; }
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
-        p.Ap--;
+p.Ap--;
         if (item.TrappedGlue)
         {
             item.TrappedGlue = false;
@@ -111,17 +111,18 @@ public partial class Game
             p.FinishedFree = true;
             return;
         }
+        p.OpenedItems.Add(item.Id);
         if (item.CardDefId.Length == 0)
         {
-            Log(MakeEvt(p, "open", "翻找了一会木箱", "似乎在翻找东西", "有人在摆弄东西", null, false, p.Pos));
+            Log(MakeEvt(p, "open", "打开了一只木箱，里面是空的", "翻找了一会木箱", "有人在摆弄东西", null, false, p.Pos));
+            LogActorText(p, "木箱是空的。");
             return;
         }
         var cardName = Cfg.Card(item.CardDefId).Name;
         p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = item.CardDefId });
-        var hidden = HasEffect(p, CardEffect.Stealth) && item.CardDefId != "";
+        var hidden = HasEffect(p, CardEffect.Stealth);
         TryStealthFor(p, out _);
-        item.CardDefId = "";
-        item.Consumed = true;
+        item.CardDefId = ""; // 箱子保留在地图上，变为空箱
         Log(MakeEvt(p, "open", hidden ? "悄悄从木箱取走了什么" : $"从「木箱」中取走了什么", "似乎在从木箱拿东西", "有人在摆弄东西", null, hidden, p.Pos));
         LogActorText(p, $"你获得了技能卡：{cardName}。");
     }
@@ -148,8 +149,15 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
         if (target.Id == p.Id) { PushOut(p.SeatIndex, Msg("不能与自己交谈。")); return; }
         if (target.Dead || target.Pos != p.Pos)
         { PushOut(p.SeatIndex, Msg("交谈对象须与你同格。")); return; }
-        p.Ap--;
+p.Ap--;
         Log(MakeEvt(p, "talk", $"和「{target.Code}」交谈了一会儿", "在和谁说话", "有人在说话", target.Code, false, p.Pos));
+        // 保镖与其守护贵宾交谈 = 催促移动（撤离点对贵宾/保镖开放后，第5回合起）
+        if (p.Role == RoleId.Bodyguard && Round >= 5 &&
+            target is NpcActor npc && npc.Kind == ActorKind.ProtectedNpc && npc.CaseId == p.CaseId && !npc.Dead)
+        {
+            npc.Urged = true;
+            PushOut(p.SeatIndex, Msg($"你催促「{npc.Code}」尽快前往撤离点。"));
+        }
     }
 
     // ---------- 高价值探查 ----------
@@ -157,21 +165,17 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
     {
         if (p.InspectedThisRound) { PushOut(p.SeatIndex, Msg("本回合已探查过。")); return; }
         p.InspectedThisRound = true;
-        var sb = new StringBuilder("附近的高价值物品：");
-        bool any = false;
-        for (int x = p.Pos.X - 1; x <= p.Pos.X + 1; x++)
-            for (int y = p.Pos.Y - 1; y <= p.Pos.Y + 1; y++)
-            {
-                var c = new CellPos(x, y);
-                if (!InMap(c)) continue;
-                foreach (var i in ItemsAt(c))
-                    if (i.Kind is ItemKind.Chest or ItemKind.Medkit)
-                    {
-                        sb.Append($" {c}「{i.Label}」");
-                        any = true;
-                    }
-            }
-        if (!any) sb.Append(" 无。");
+        // 探查：指出当前格哪些可交互物品"可能有东西"（无法分辨是物品还是陷阱）
+        var chests = ItemsAt(p.Pos).Where(i => i.Kind == ItemKind.Chest).ToList();
+        var maybe = chests.Where(i => i.CardDefId.Length > 0 || i.TrappedGlue).ToList();
+        var sb = new StringBuilder(maybe.Count > 0
+            ? "本格可能有东西的物品："
+            : "本格的可交互物品看起来都没有东西。");
+        foreach (var i in maybe)
+        {
+            sb.Append($"「{i.Label}」 ");
+            p.ReconMaybes.Add(i.Id);
+        }
         Log(MakeEvt(p, "inspect", "四下张望观察周围", "在四下张望", "有人在观察环境", null, false, p.Pos));
         PushOut(p.SeatIndex, Msg(sb.ToString()));
     }
@@ -369,10 +373,12 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
         Log(MakeEvt(p, "card", $"在「{item.Label}」上布置了万能胶陷阱", "似乎在摆弄物品", "有人在摆弄东西", null, hidden, p.Pos));
     }
 
-    private void UseDrone(PlayerActor p, FreeCmd cmd)
+private void UseDrone(PlayerActor p, FreeCmd cmd)
     {
         var cell = new CellPos(cmd.X, cmd.Y);
-        if (!InMap(cell)) { PushOut(p.SeatIndex, Msg("目标格不在范围内。")); return; }
+        if (!InMap(cell)) { PushOut(p.SeatIndex, Msg("目标格不在地图上。")); return; }
+        if (CellPos.Manhattan(p.Pos, cell) > Cfg.Map.DroneRange)
+        { PushOut(p.SeatIndex, Msg($"无人机最远可探查距离为 {Cfg.Map.DroneRange} 格。")); return; }
         var occupants = Occupants(cell).Select(a => a.Code).ToList();
         var items = ItemsAt(cell).Select(i => i.Label).ToList();
         AddBugWatch(p.SeatIndex, cell, 1, 0);
@@ -426,10 +432,10 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
                 Log(MakeEvt(p, "card", "释放追踪探查扫描", "似乎在扫描什么", "有人在活动", null, false, p.Pos));
                 break;
             }
-            case CardEffect.Drone:
+case CardEffect.Drone:
             {
                 var cell = new CellPos(cmd.X, cmd.Y);
-                if (!InMap(cell)) return false;
+                if (!InMap(cell) || CellPos.Manhattan(p.Pos, cell) > Cfg.Map.DroneRange) return false;
                 ConsumeCard(p, ci);
                 var occupants = Occupants(cell).Select(a => a.Code).ToList();
                 var items = ItemsAt(cell).Select(i => i.Label).ToList();

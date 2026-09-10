@@ -24,6 +24,7 @@ public partial class Game
             p.CoverTargetId = -1; // 掩护每回合重新指定
             SupplyRoundCard(p);
         }
+        foreach (var n in ProtectedNpcs) n.Urged = false; // 催促效果每回合重置
         _freeQueue.Clear();
         _freeQueue.AddRange(Players.Where(p => !p.IsObserver));
         _freeCursor = 0;
@@ -247,7 +248,14 @@ public partial class Game
         {
             var npc = (NpcActor)target;
             if (npc.Kind == ActorKind.ProtectedNpc)
+            {
+                if (!npc.Exposed)
+                {
+                    npc.Exposed = true;
+                    AnnounceAll(new LogOut(-1, $"「{npc.Code}」的身份暴露了——它是 {npc.CaseColor}案贵宾！", 0, null, null, "event", false));
+                }
                 return (npc.CaseColor + "案贵宾", npc.ItemIntact ? "随身财物尚在。" : "财物已被窃走。");
+            }
             return ("平民", "");
         }
         var p = (PlayerActor)target;

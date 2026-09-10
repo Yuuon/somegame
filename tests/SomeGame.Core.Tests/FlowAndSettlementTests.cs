@@ -29,9 +29,22 @@ public class SettlementTests
         npc.Pos = g.Extraction;
         npc.Hp = 1;
         npc.ItemIntact = true;
+        npc.Evacuated = true; // 到达撤离点且成功撤离
         var s = g.CheckSettlement("test");
         Assert.NotNull(s);
         Assert.Contains(b.SeatIndex, s!.Value.Winners);
+    }
+
+    [Fact]
+    public void E1_NotEvacuatedYet_NoWin()
+    {
+        var (g, _, _, b, _, npc) = Game4();
+        npc.Pos = g.Extraction;
+        npc.Hp = 1;
+        npc.ItemIntact = true;
+        npc.Evacuated = false; // 已抵达但尚未撤离（例如有敌对玩家在场）
+        Assert.Null(g.CheckSettlement("test"));
+        _ = b;
     }
 
     [Fact]
@@ -116,6 +129,44 @@ public class SpawnTests
                     $"seed={seed} 保镖与目标距离={CellPos.Manhattan(b.Pos, npc.Pos)} 超过移动范围");
             }
         }
+    }
+
+    [Fact]
+    public void ProtectedNpc_SpawnsFurtherThanFive_FromExtraction()
+    {
+        for (long seed = 1; seed <= 20; seed++)
+        {
+            var g = FourBots(seed);
+            foreach (var n in g.ProtectedNpcs)
+                Assert.True(CellPos.Manhattan(n.Pos, g.Extraction) > 5,
+                    $"seed={seed} 贵宾距撤离点={CellPos.Manhattan(n.Pos, g.Extraction)} 不满足>5");
+        }
+    }
+
+    [Fact]
+    public void Extraction_Visibility_Gated()
+    {
+        var g = FourBots(1);
+        // 第1回合：所有人不可见（含保镖）
+        var b = g.Players.First(p => p.Role == RoleId.Bodyguard);
+        Assert.Equal(1, g.Round);
+        Assert.False(g.BuildView(b).ExtractionVisible);
+        Assert.Equal(-1, g.BuildView(b).ProtectedCountdown);
+
+        // 第5回合：保镖可见
+        typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 5 });
+        Assert.True(g.BuildView(b).ExtractionVisible);
+        var k = g.Players.First(p => p.Role == RoleId.Killer);
+        Assert.False(g.BuildView(k).ExtractionVisible);
+
+        // 身份暴露：对全体开放
+        g.ProtectedNpcs[0].Exposed = true;
+        Assert.True(g.BuildView(k).ExtractionVisible);
+
+        // 第10回合：无条件开放
+        g.ProtectedNpcs[0].Exposed = false;
+        typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 10 });
+        Assert.True(g.BuildView(k).ExtractionVisible);
     }
 
     [Fact]

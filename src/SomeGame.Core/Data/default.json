@@ -5,7 +5,9 @@
     "height": 15,
     "coverItemCount": 8,
     "medkitItemCount": 10,
-    "decoyNpcCount": 8,
+    "emptyChestCount": 10,
+    "decoyNpcCount": 14,
+    "droneRange": 10,
     "extractionAtCenter": true
   },
   "protectedNpcHp": 5,

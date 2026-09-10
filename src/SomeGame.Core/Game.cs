@@ -94,6 +94,7 @@ public partial class Game
 
         BuildDeck();
         PlaceMedkitsAndCovers();
+        PlaceEmptyChests();
 
         foreach (var c in plan.Cases)
         {

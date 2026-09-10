@@ -34,14 +34,18 @@ public sealed class GameConfig
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private static GameConfig? _embedded;
+    private static string? _defaultJson;
     public static GameConfig Default()
     {
-        if (_embedded != null) return _embedded;
-        using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("SomeGame.Core.Data.default.json")
-                      ?? throw new InvalidOperationException("embedded default.json missing");
-        _embedded = Load(JsonDocument.Parse(s));
-        return _embedded;
+        // 每次返回全新实例，避免调用方就地修改造成共享状态污染
+        if (_defaultJson == null)
+        {
+            using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("SomeGame.Core.Data.default.json")
+                          ?? throw new InvalidOperationException("embedded default.json missing");
+            using var r = new StreamReader(s);
+            _defaultJson = r.ReadToEnd();
+        }
+        return Load(JsonDocument.Parse(_defaultJson));
     }
 
     public string Serialize() => JsonSerializer.Serialize(this, JsonOpt);
@@ -53,7 +57,9 @@ public sealed class MapCfg
     public int Height { get; set; } = 15;
     public int CoverItemCount { get; set; } = 8;
     public int MedkitItemCount { get; set; } = 10;
-    public int DecoyNpcCount { get; set; } = 8;
+    public int EmptyChestCount { get; set; } = 10;
+    public int DecoyNpcCount { get; set; } = 14;
+    public int DroneRange { get; set; } = 10;
     public bool ExtractionAtCenter { get; set; } = true;
 }
 

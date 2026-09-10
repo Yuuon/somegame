@@ -17,6 +17,10 @@ public partial class Game
             if (p.Role == RoleId.Bodyguard && target is NpcActor { Kind: ActorKind.ProtectedNpc } npc &&
                 p.CoverTargetId != npc.Id)
                 return new FreeCmd("cover", ActorId: npc.Id);
+            // 第5回合后催促贵宾移动（未暴露时靠催促推进）
+            if (p.Role == RoleId.Bodyguard && target is NpcActor { Kind: ActorKind.ProtectedNpc } npc2 &&
+                !npc2.Exposed && Round >= 5 && !npc2.Urged)
+                return new FreeCmd("talk", ActorId: npc2.Id);
             if (p.Role == RoleId.Thief && p.CarriedCase < 0 && !p.MovedThisRound && p.Ap >= 1)
             {
                 var stealthCard = p.Hand.FirstOrDefault(h => Cfg.Card(h.DefId).Fx == CardEffect.Stealth);

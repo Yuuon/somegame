@@ -23,6 +23,7 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 #objective { background:#101623; border:1px solid var(--line); padding:8px 12px; border-radius:8px; margin-bottom:8px; color:var(--warn); }
 #effects { min-height:20px; color: var(--ok); margin-bottom:8px; }
 #main { display:flex; gap: 14px; }
+#leftcol { width: 210px; flex: 0 0 210px; display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height: 70vh; }
 #board-wrap { flex: 1 1 auto; overflow:auto; }
 #board { display:grid; gap:2px; width:max-content; margin:auto; }
 .cell { width:44px; height:44px; border-radius:4px; border:1px solid #2a3142; background:#1a1f2c; position:relative; text-align:center; }

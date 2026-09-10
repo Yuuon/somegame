@@ -41,9 +41,8 @@ public partial class Game
                         interactables.Add(new ItemRefOut
                         {
                             Id = i.Id,
-                            Label = i.Label,
+                            Label = ItemLabelFor(p, i),
                             Kind = i.Kind.ToString(),
-                            HasCard = i.CardDefId.Length > 0,
                         });
                 }
             }
@@ -86,6 +85,10 @@ public partial class Game
             }
         }
 
+        // 撤离点可见性：前5回合保密；第5回合开放给保镖；暴露即对全体开放；第10回合无条件开放
+        bool extractionVisible = Round >= 10 ||
+            (Round >= 5 && (p.Role == RoleId.Bodyguard || ProtectedNpcs.Any(n => n.Exposed)));
+
         return new ViewOut
         {
             Seat = p.SeatIndex,
@@ -102,6 +105,7 @@ public partial class Game
             MyCode = p.Code,
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,
+            ExtractionVisible = extractionVisible,
             Role = RoleDisplay(p),
             RoleKey = p.Role.ToString().ToLowerInvariant(),
             RoleColor = p.CaseId >= 0 ? PlanColor(p.CaseId) : "",
@@ -123,8 +127,24 @@ public partial class Game
             InBattle = inBattle,
             BattlePrompt = battlePrompt,
             Cells = cells,
-            ProtectedCountdown = ProtectedNpcs.Where(n => !n.Dead).Select(n => CellPos.Manhattan(n.Pos, Extraction)).DefaultIfEmpty(0).Min(),
+            ProtectedCountdown = extractionVisible
+                ? ProtectedNpcs.Where(n => !n.Dead).Select(n => CellPos.Manhattan(n.Pos, Extraction)).DefaultIfEmpty(0).Min()
+                : -1,
         };
+    }
+
+    // 木箱标签按玩家掌握信息动态给出：默认可交互物品不显示是否为空
+    private string ItemLabelFor(PlayerActor p, Item it)
+    {
+        if (it.Kind == ItemKind.Chest)
+        {
+            if (p.OpenedItems.Contains(it.Id))
+                return "木箱（空）";
+            if (p.ReconMaybes.Contains(it.Id) && (it.CardDefId.Length > 0 || it.TrappedGlue))
+                return "木箱（可能有东西）";
+            return "木箱";
+        }
+        return it.Label;
     }
 
     private static string? EffectLabel(CardEffect e) => e switch

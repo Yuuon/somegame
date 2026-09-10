@@ -116,7 +116,7 @@
     $('s-stage').textContent = stageText(v.stage);
     $('s-hp').textContent = v.hp;
     $('s-ap').textContent = v.ap;
-    $('s-countdown').textContent = v.protectedCountdown;
+    $('s-countdown').textContent = v.protectedCountdown >= 0 ? v.protectedCountdown : '?';
     $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
     $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
     if (v.medkitHints && v.medkitHints.length) {
@@ -149,7 +149,7 @@
       div.className = 'cell tier' + c.tier + (x === v.x && y === v.y ? ' me' : '') +
         (x === v.extractionX && y === v.extractionY ? ' extraction' : '') +
         (c.burning ? ' burning' : '') + (c.smoky ? ' smoky' : '');
-      if (x === v.extractionX && y === v.extractionY) {
+      if (x === v.extractionX && y === v.extractionY && v.extractionVisible) {
         const t = document.createElement('span');
         t.className = 'who';
         t.textContent = '★撤离点';
@@ -315,8 +315,8 @@
         let clickable = false;
         let action = null;
         if (pendingItem && canAct) { label = `对「${it.label}」布置陷阱`; clickable = true; action = () => itemClick(it, 'glue'); }
-        else if (it.kind === 'Chest' && canAct) { label = it.label + (it.hasCard ? '（取卡）' : '（空）'); clickable = true; action = () => itemClick(it, 'open'); }
-        else if (it.kind === 'Medkit' && canAct) { label = '医疗包（+1HP）'; clickable = true; action = () => itemClick(it, 'medkit'); }
+        else if (it.kind === 'Chest' && canAct) { label = it.label; clickable = true; action = () => itemClick(it, 'open'); }
+        else if (it.kind === 'Medkit' && canAct) { label = it.label + '（+1HP）'; clickable = true; action = () => itemClick(it, 'medkit'); }
         b.className = 'cellitem' + (clickable ? ' clickable' : '');
         b.textContent = label;
         if (action) b.onclick = action;
