@@ -169,7 +169,6 @@ internal sealed class Hub
         game.Continue();
         room.ResetDeadline();
         FlushRoom(room);
-        BroadcastLobby(room);
     }
 
     private void HandleCmd(Client client, JsonElement root)

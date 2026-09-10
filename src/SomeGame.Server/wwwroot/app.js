@@ -16,6 +16,7 @@
     host: false,
     pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
     busy: false,
+    inGame: false,
   };
 
   function connect() {
@@ -34,6 +35,7 @@
   function hideOverlay() { $('overlay').style.display = 'none'; }
 
   function handle(msg) {
+    if (msg.type === 'lobby' && state.inGame) return; // 对局开始后忽略大厅广播
     switch (msg.type) {
       case 'lobby':
         state.host = msg.isHost;
@@ -58,6 +60,8 @@
         state.myRole = msg.role;
         state.myColor = msg.roleColor;
         if (msg.objective) state.objective = msg.objective;
+        state.inGame = true;
+        show('game');
         render();
         break;
       case 'checkresult':
