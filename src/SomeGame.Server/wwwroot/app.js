@@ -140,8 +140,22 @@
     return p && ['drone', 'track', 'molotov'].includes(p.defId);
   }
 
+  function pendingHint(p) {
+    if (!p) return '';
+    if (p.kind === 'move') return p.dash ? '选择疾走目标（距离 1-5 格）' : '选择移动目标（距离 1-3 格）';
+    if (p.kind === 'cover') return '选择同格角色进行掩护';
+    if (p.defId === 'glue') return '选择本格物品布置陷阱';
+    if (['heal', 'mimic', 'dye'].includes(p.defId)) return '选择同格角色作为目标';
+    if (['drone', 'track', 'molotov'].includes(p.defId)) return '全图选择：点击地图格子指定目标';
+    return '';
+  }
+
   function renderBoard(v) {
     const board = $('board');
+    const hint = pendingHint(state.pending);
+    const hintEl = $('board-hint');
+    hintEl.textContent = hint;
+    hintEl.style.display = hint ? '' : 'none';
     const fullMap = state.pending && isCellTarget(state.pending);
     const cells = fullMap
       ? Array.from({ length: v.mapW * v.mapH }, (_, i) => ({ x: i % v.mapW, y: Math.floor(i / v.mapW), tier: 2 }))
@@ -184,7 +198,7 @@
       }
       const clickable = cellClickable(c, v);
       if (clickable) {
-        div.classList.add('clickable');
+        div.classList.add('clickable', 'target');
         div.onclick = () => onCellClick(x, y, c);
       }
       board.appendChild(div);

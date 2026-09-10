@@ -39,6 +39,9 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 .cell .item { font-size:9px; color:#9fb3c8; display:block; }
 .cell.clickable { cursor:pointer; }
 .cell.clickable:hover { border-color: var(--accent); }
+.cell.target { border-color: var(--ok); box-shadow: 0 0 6px rgba(6,214,160,.55); }
+.cell.target:hover { background:#20302e; }
+#board-hint { background: var(--warn); color:#0a0e14; font-weight:700; border-radius:6px; padding:4px 10px; margin-bottom:6px; display:inline-block; }
 #side { width: 420px; display:flex; flex-direction:column; gap:6px; }
 #hand-title { color: var(--dim); }
 #cell-title { color: var(--dim); font-size: 13px; }
