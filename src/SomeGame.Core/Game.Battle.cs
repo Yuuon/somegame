@@ -39,6 +39,8 @@ public partial class Game
         };
         attacker.PubliclyHostile = true;
         Stage = Stage.Battle;
+        Metrics.TotalBattles++;
+        if (Metrics.FirstBattleRound < 0) Metrics.FirstBattleRound = Round;
 
         PushOut(attacker.SeatIndex, new LogOut(-1, $"战斗开始：你 vs 「{opponent.Code}」（距离 {d}）。", 0, null, null, "battle", false));
         if (opponent is PlayerActor op)

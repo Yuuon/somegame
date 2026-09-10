@@ -83,7 +83,72 @@ public static class Report
             sb.AppendLine($"| {r} | {n} |");
         sb.AppendLine();
 
+        // ---------- 对局过程指标 ----------
+        sb.AppendLine("## 4. 对局过程指标（找目标耗时 / 行动密度）");
+        sb.AppendLine();
+        sb.AppendLine("| 局型 | 局数 | 平均回合 | 杀手首次接近贵宾 | 小偷首次接近贵宾 | 保镖首次接近贵宾 | 首次战斗 | 贵宾首次暴露 | 平均战斗数 | 人均自由行动/回合 | 人均查验/回合 |");
+        sb.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+        AppendProcessMetrics(sb, cfg, "4人局", 4, 12);
+        AppendProcessMetrics(sb, cfg, "8人局", 8, 12);
+        sb.AppendLine();
+
+        sb.AppendLine("### 4.1 人均行动构成（自由行动操作分布）");
+        sb.AppendLine();
+        sb.AppendLine("| 局型 | 局数 | 行动总数 | 人均/回合 | 移动 | 交谈 | 开箱 | 探查 | 使用卡 | 医疗包 | 窃取/掩护/疾走 | 结束 |");
+        sb.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+        AppendActionDist(sb, cfg, "4人局", 4, 12);
+        AppendActionDist(sb, cfg, "8人局", 8, 12);
+        sb.AppendLine();
+
         return sb.ToString();
+    }
+
+    private static void AppendActionDist(System.Text.StringBuilder sb, GameConfig cfg, string label, int count, int seeds)
+    {
+        var seats = Enumerable.Range(0, count).Select(i => new SeatIn($"{label}{i}", true)).ToArray();
+        var agg = new Dictionary<string, long>();
+        long total = 0, rounds = 0;
+        for (int s = 0; s < seeds; s++)
+        {
+            var g = new Game(cfg, 9000 + s, seats);
+            g.Continue();
+            rounds += g.Round;
+            foreach (var (k, v) in g.Metrics.ActionCounts) agg[k] = v + (agg.TryGetValue(k, out var x) ? x : 0);
+        }
+        total = agg.Values.Sum();
+        double per = total / Math.Max(1, rounds * count);
+        long move = agg.GetValueOrDefault("move");
+        long open = agg.GetValueOrDefault("open");
+        long talk = agg.GetValueOrDefault("talk");
+        long inspect = agg.GetValueOrDefault("inspect");
+        long card = agg.GetValueOrDefault("card");
+        long medkit = agg.GetValueOrDefault("medkit");
+        long special = agg.GetValueOrDefault("steal") + agg.GetValueOrDefault("cover");
+        long finish = agg.GetValueOrDefault("finish");
+        sb.AppendLine($"| {label} | {seeds} | {total} | {per:F1} | {move} | {talk} | {open} | {inspect} | {card} | {medkit} | {special} | {finish} |");
+    }
+
+    private static void AppendProcessMetrics(System.Text.StringBuilder sb, GameConfig cfg, string label, int count, int seeds)
+    {
+        var seats = Enumerable.Range(0, count).Select(i => new SeatIn($"{label}{i}", true)).ToArray();
+        double rounds = 0, battles = 0, freeActs = 0, checks = 0, firstBattle = 0, expose = 0;
+        int killerN = 0, thiefN = 0, bodyN = 0;
+        double killer = 0, thief = 0, body = 0;
+        for (int s = 0; s < seeds; s++)
+        {
+            var g = new Game(cfg, 7000 + s, seats);
+            g.Continue();
+            rounds += g.Round;
+            battles += g.Metrics.TotalBattles;
+            freeActs += g.Metrics.TotalPlayerFreeActions;
+            checks += g.Metrics.TotalPlayerCheckActions;
+            if (g.Metrics.FirstKillerNearVipRound > 0) { killer += g.Metrics.FirstKillerNearVipRound; killerN++; }
+            if (g.Metrics.FirstThiefNearVipRound > 0) { thief += g.Metrics.FirstThiefNearVipRound; thiefN++; }
+            if (g.Metrics.FirstBodyguardNearVipRound > 0) { body += g.Metrics.FirstBodyguardNearVipRound; bodyN++; }
+            if (g.Metrics.FirstBattleRound > 0) firstBattle += g.Metrics.FirstBattleRound;
+            if (g.Metrics.FirstVipExposeRound > 0) expose += g.Metrics.FirstVipExposeRound;
+        }
+        sb.AppendLine($"| {label} | {seeds} | {rounds / seeds:F1} | {killer / (killerN > 0 ? killerN : 1):F1} | {thief / (thiefN > 0 ? thiefN : 1):F1} | {body / (bodyN > 0 ? bodyN : 1):F1} | {firstBattle / seeds:F1} | {expose / seeds:F1} | {battles / seeds:F1} | {freeActs / Math.Max(1, rounds * count):F1} | {checks / Math.Max(1, rounds * count):F1} |");
     }
 
     public sealed record StressReport(int Seeds, int Converged, double AvgRounds, double AvgBattles, double AvgDeaths, Dictionary<string, int> Reasons);

@@ -6,10 +6,15 @@ public partial class Game
     {
         var target = BotFreeTarget(p);
         bool hasAttackCard = p.Hand.Any(h => Cfg.Card(h.DefId).Fx is CardEffect.Gun or CardEffect.Knife);
+        var maxHp = Cfg.Role(p.Role.ToString().ToLowerInvariant()).Hp;
 
-        // 危急时优先治疗
+        // 受重伤且持治疗卡 → 使用
+        var healCard = p.Hand.FirstOrDefault(h => Cfg.Card(h.DefId).Fx == CardEffect.Heal);
+        if (healCard != null && p.Hp <= maxHp - 2 && p.Ap >= 1) return new FreeCmd("card", CardId: healCard.Id);
+
+        // 危急时优先拾取医疗包
         var med = ItemsAt(p.Pos).FirstOrDefault(i => i.Kind == ItemKind.Medkit);
-        if (med != null && p.Hp <= 2 && p.Ap >= 1) return new FreeCmd("medkit");
+        if (med != null && p.Hp <= maxHp - 1 && p.Ap >= 1) return new FreeCmd("medkit");
 
         // 与目标同格
         if (target != null && target.Pos == p.Pos)
@@ -31,6 +36,18 @@ public partial class Game
             var chest = ItemsAt(p.Pos).FirstOrDefault(i => i.Kind == ItemKind.Chest && i.CardDefId.Length > 0);
             if (chest != null && p.Ap >= 1 && !hasAttackCard) return new FreeCmd("open", ItemId: chest.Id);
             return new FreeCmd("finish");
+        }
+
+        // 补充行动：同格有木箱且缺卡 → 开箱；同格有平民 → 有概率交谈获取情报/卡
+        if (p.Ap >= 1)
+        {
+            var chest2 = ItemsAt(p.Pos).FirstOrDefault(i => i.Kind == ItemKind.Chest && i.CardDefId.Length > 0);
+            if (chest2 != null && (!hasAttackCard || Rng.Chance(0.3)))
+                return new FreeCmd("open", ItemId: chest2.Id);
+            var civilian = Occupants(p.Pos).OfType<NpcActor>()
+                .FirstOrDefault(n => n.Kind == ActorKind.DecoyNpc && !n.Dead && n.Id != p.Id);
+            if (civilian != null && Rng.Chance(0.6))
+                return new FreeCmd("talk", ActorId: civilian.Id);
         }
 
         if (target != null && !p.MovedThisRound && p.Ap >= 1)
@@ -81,6 +98,7 @@ public partial class Game
 
     private void ExecuteBotCheck(PlayerActor p)
     {
+        Metrics.TotalPlayerCheckActions++;
         ActorNode? target = null;
         if (p.Role == RoleId.Killer)
         {

@@ -551,6 +551,41 @@ public class FlowTests
         Assert.Contains(npc.Code, g.ObjectiveText(g.Players.First(p => p.Role == RoleId.Killer), "红"));
     }
 
+    [Fact]
+    public void CaseMembers_ReceiveVipRegionHint()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 13;
+        cfg.Map.Height = 13;
+        cfg.Map.DecoyNpcCount = 3;
+        var g = new Game(cfg, 3, new[]
+        {
+            new SeatIn("A", true), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+        var k = g.Players.First(p => p.Role == RoleId.Killer);
+        var npc = g.ProtectedOfCase(k.CaseId);
+        var msgs = g.DrainOutbox(k.SeatIndex);
+        Assert.Contains(msgs, m => m is LogOut lo && lo.Text.Contains(npc.Code) && lo.Text.Contains("大致在"));
+    }
+
+    [Fact]
+    public void Metrics_Recorded_AfterGameRuns()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 13;
+        cfg.Map.Height = 13;
+        cfg.Map.DecoyNpcCount = 3;
+        var g = new Game(cfg, 4, new[]
+        {
+            new SeatIn("A", true), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+        g.Continue();
+        Assert.True(g.Metrics.TotalPlayerFreeActions > 0);
+        Assert.True(g.Metrics.TotalPlayerCheckActions > 0);
+        Assert.True(g.Metrics.FirstBattleRound > 0 || g.Metrics.TotalBattles > 0);
+        Assert.Contains(g.Metrics.ActionCounts, kv => kv.Key == "move");
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

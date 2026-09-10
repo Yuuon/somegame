@@ -26,12 +26,40 @@ public partial class Game
             SupplyRoundCard(p);
         }
         foreach (var n in ProtectedNpcs) n.Urged = false; // 催促效果每回合重置
+
+        // 每回合给同案成员提供目标贵宾的粗略方位，避免无目的搜寻
+        foreach (var p in Players)
+        {
+            if (p.IsObserver || p.CaseId < 0) continue;
+            var vip = ProtectedNpcs.FirstOrDefault(n => n.CaseId == p.CaseId && !n.Dead);
+            if (vip != null)
+                PushOut(p.SeatIndex, new LogOut(-1, $"目标贵宾「{vip.Code}」当前大致在{CoarseRegion(vip.Pos)}（距你约 {CellPos.Manhattan(p.Pos, vip.Pos)} 格）。", 0, null, null, "info", false));
+        }
+
+        RecordContactMetrics();
+
         _freeQueue.Clear();
         _freeQueue.AddRange(Players.Where(p => !p.IsObserver));
         _freeCursor = 0;
         PushAll(new PhaseOut { Stage = Stage.Free, Round = Round, Text = $"第 {Round} 回合 · 自由行动阶段" });
         PushAll(new LogOut(-1, $"第 {Round} 回合开始，自由行动阶段。", 0, null, null, "phase", false));
         EndFreeWhenAllDone();
+    }
+
+    private void RecordContactMetrics()
+    {
+        foreach (var vip in ProtectedNpcs.Where(n => !n.Dead))
+        {
+            foreach (var k in Players.Where(x => x.Role == RoleId.Killer && x.CaseId == vip.CaseId && !x.Dead))
+                if (Metrics.FirstKillerNearVipRound < 0 && CellPos.Manhattan(k.Pos, vip.Pos) <= 2)
+                    Metrics.FirstKillerNearVipRound = Round;
+            foreach (var t in Players.Where(x => x.Role == RoleId.Thief && x.CaseId == vip.CaseId && !x.Dead))
+                if (Metrics.FirstThiefNearVipRound < 0 && CellPos.Manhattan(t.Pos, vip.Pos) <= 2)
+                    Metrics.FirstThiefNearVipRound = Round;
+            foreach (var b in Players.Where(x => x.Role == RoleId.Bodyguard && x.CaseId == vip.CaseId && !x.Dead))
+                if (Metrics.FirstBodyguardNearVipRound < 0 && CellPos.Manhattan(b.Pos, vip.Pos) <= 2)
+                    Metrics.FirstBodyguardNearVipRound = Round;
+        }
     }
 
     private void SupplyRoundCard(PlayerActor p)
@@ -141,6 +169,8 @@ public partial class Game
 
     private void ExecuteFree(PlayerActor p, FreeCmd cmd)
     {
+        Metrics.TotalPlayerFreeActions++;
+        Metrics.ActionCounts[cmd.Op] = 1 + (Metrics.ActionCounts.TryGetValue(cmd.Op, out var v) ? v : 0);
         switch (cmd.Op)
         {
             case "move": DoMove(p, cmd); break;
@@ -199,6 +229,7 @@ public partial class Game
 
     private void ExecuteCheck(PlayerActor p, CheckCmd cmd)
     {
+        Metrics.TotalPlayerCheckActions++;
         if (cmd.CardId is { } cid)
         {
             var ci = p.Hand.FirstOrDefault(h => h.Id == cid);
@@ -275,6 +306,7 @@ public partial class Game
                 {
                     npc.Exposed = true;
                     verifier.VerifiedVipCaseId = npc.CaseId;
+                    if (Metrics.FirstVipExposeRound < 0) Metrics.FirstVipExposeRound = Round;
                     AnnounceAll(new LogOut(-1, $"「{npc.Code}」的身份暴露了——它是 {npc.CaseColor}案贵宾！", 0, null, null, "event", false));
                 }
                 else verifier.VerifiedVipCaseId = npc.CaseId;

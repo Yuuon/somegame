@@ -36,6 +36,7 @@ public partial class Game
     private int _nextActorId = 1;
 
     public readonly List<ActionEvt> Archive = new();
+    public GameMetrics Metrics { get; } = new();
     private readonly Dictionary<int, List<object>> _outbox = new();
 
     public AwaitingInfo? Await { get; private set; }

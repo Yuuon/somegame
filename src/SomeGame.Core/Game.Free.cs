@@ -157,12 +157,15 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
         { PushOut(p.SeatIndex, Msg("交谈对象须与你同格。")); return; }
 p.Ap--;
         Log(MakeEvt(p, "talk", $"和「{target.Code}」交谈了一会儿", "在和谁说话", "有人在说话", target.Code, false, p.Pos));
-        // 与平民交谈：恐慌者告知出事坐标；且有几率获得随机临时卡（单消耗）
+        // 与平民交谈：恐慌者告知出事坐标；附近贵宾的平民可能透露其方位；且有几率获得随机临时卡（单消耗）
         if (target is NpcActor decoy && decoy.Kind == ActorKind.DecoyNpc)
         {
             if (decoy.PanicTurns > 0 && decoy.PanicSource is { } src)
                 PushOut(p.SeatIndex, Msg($"「{decoy.Code}」惊恐地说：那边 {src} 出事了！"));
-            if (Rng.Chance(0.3))
+            else if (ProtectedNpcs.FirstOrDefault(n => !n.Dead && CellPos.Manhattan(decoy.Pos, n.Pos) <= 3) is { } nearVip &&
+                     Rng.Chance(0.5))
+                PushOut(p.SeatIndex, Msg($"「{decoy.Code}」嘀咕道：刚才好像有个气度不凡的人往{CoarseRegion(nearVip.Pos)}去了。"));
+            if (Rng.Chance(0.4))
             {
                 var reward = RandomTempCardDef();
                 p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = reward, Temp = true, Void = false });
@@ -227,8 +230,9 @@ if (p.CarriedCase >= 0) { PushOut(p.SeatIndex, Msg("你已携带着财物。"));
         { PushOut(p.SeatIndex, Msg("你尚未查验出这位贵宾的身份，无法窃取。")); return; }
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
         p.Ap--;
-        npc.ItemIntact = false;
+npc.ItemIntact = false;
         p.CarriedCase = npc.CaseId;
+        if (Metrics.FirstStealRound < 0) Metrics.FirstStealRound = Round;
 var hidden = TryStealthFor(p, out _);
         Log(MakeEvt(p, "steal", hidden ? "贴近贵宾，悄悄取走了某物" : "从贵宾身上窃取了财物！", "与贵宾十分贴近", "有人在活动", npc.Code, hidden, p.Pos));
         LogActorText(p, $"你窃取了 {npc.CaseColor} 案财物！现在前往撤离点核验。");
