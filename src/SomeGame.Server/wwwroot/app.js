@@ -66,7 +66,7 @@
         if (msg.objective) state.objective = msg.objective;
         state.inGame = true;
         show('game');
-        render();
+        scheduleRender();
         break;
       case 'checkresult':
         appendLog({
@@ -125,11 +125,32 @@
     if (v.medkitHints && v.medkitHints.length) {
       $('effects').textContent += (v.effects.length ? ' ｜ ' : '') + '附近医疗包：' + v.medkitHints.join(' ');
     }
-    renderBoard(v);
     renderCellPanel(v);
     renderHand(v);
     renderActions(v);
     renderBattle(v);
+    // 棋盘渲染较重（全图），仅当盘面相关内容变化时重建
+    const sig = boardSig(v);
+    if (sig !== lastBoardSig) {
+      lastBoardSig = sig;
+      renderBoard(v);
+    }
+  }
+
+  let lastBoardSig = '';
+  let renderScheduled = false;
+  function boardSig(v) {
+    const p = state.pending || {};
+    const pSig = (p.kind || '') + (p.dash ? 'd' : '') + (p.defId || '');
+    return (v.x + ',' + v.y + '|' + v.round + '|' + v.extractionExact + '|' + pSig + '|' +
+      (v.cells || []).map(c => c.x + ',' + c.y + ':' + c.tier + ':' +
+        (c.occupants || []).join('/') + ':' + (c.items || []).join('/')).join(';'));
+  }
+  // 多条 view 在短时间内到达时合并为一次渲染（setTimeout 保证后台也执行）
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    setTimeout(() => { renderScheduled = false; render(); }, 16);
   }
 
   function stageText(s) {
@@ -182,7 +203,12 @@
             const t = document.createElement('span');
             t.className = 'who clickable-occ';
             t.textContent = code;
-            t.onclick = (e) => { e.stopPropagation(); occupantClick(code); };
+            t.onclick = (e) => {
+              // 移动/选格目标时，让点击落到格子本身（多人同格也不阻挡选格）
+              if (state.pending && (state.pending.kind === 'move' || isCellTarget(state.pending))) return;
+              e.stopPropagation();
+              occupantClick(code);
+            };
             div.appendChild(t);
           });
         }
@@ -252,7 +278,7 @@
         render();
         return;
       }
-      if (p.kind === 'checkCard' && p.defId === 'heal') {
+      if (p.kind === 'checkCard' && (p.defId === 'heal' || p.defId === 'medkit')) {
         send({ t: 'cmd', op: 'card', cardId: p.cardId, target: code });
         state.pending = null;
         return;
@@ -299,7 +325,7 @@
 
     const canAct = v.yourTurn;
     const pendingCover = state.pending && state.pending.kind === 'cover';
-    const pendingActor = state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'mimic' || state.pending.defId === 'dye');
+    const pendingActor = state.pending && (['heal', 'medkit', 'mimic', 'dye'].includes(state.pending.defId));
     const pendingItem = state.pending && state.pending.defId === 'glue';
     const showTalk = canAct && v.awaitKind === 'FreeAction';
     const showCheck = canAct && v.awaitKind === 'CheckAction';
@@ -308,8 +334,8 @@
     if (me.occupants.length) {
       const row = document.createElement('div');
       row.className = 'cell-occupants';
-      // 治疗包可对自己使用
-      if (state.pending && state.pending.defId === 'heal' && canAct) {
+      // 治疗包/医疗包可对自己使用
+      if (state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'medkit') && canAct) {
         const selfChip = document.createElement('button');
         selfChip.className = 'chip clickable';
         selfChip.textContent = v.myCode + '（自己）';
@@ -398,7 +424,7 @@
   }
 
   function targetOf(defId) {
-    if (['heal', 'mimic', 'dye'].includes(defId)) return 'actor';
+    if (['heal', 'medkit', 'mimic', 'dye'].includes(defId)) return 'actor';
     if (defId === 'glue') return 'item';
     if (['drone', 'molotov', 'track'].includes(defId)) return 'cell';
     return 'self';
@@ -419,10 +445,11 @@
     }
     const kind = v.awaitKind === 'CheckAction' ? 'checkCard' : 'freeCard';
     const tgt = targetOf(defId);
+    const isHeal = defId === 'heal' || defId === 'medkit';
     if (tgt === 'self') {
       send({ t: 'cmd', op: 'card', cardId: card.id });
-    } else if (defId === 'heal') {
-      // 治疗包：无其他同格角色时直接治疗自己，否则让玩家选择目标（含自己）
+    } else if (isHeal) {
+      // 治疗包/医疗包：无其他同格角色时直接治疗自己，否则让玩家选择目标（含自己）
       const me = (v.cells || []).find(c => c.x === v.x && c.y === v.y);
       const others = (me?.occupants || []).filter(c => c !== v.myCode);
       if (!others.length) {
