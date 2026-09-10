@@ -116,6 +116,7 @@ p.Ap--;
         {
             Log(MakeEvt(p, "open", "打开了一只木箱，里面是空的", "翻找了一会木箱", "有人在摆弄东西", null, false, p.Pos));
             LogActorText(p, "木箱是空的。");
+            BroadcastVague(p.Pos, "远处有人在翻找木箱");
             return;
         }
         var cardName = Cfg.Card(item.CardDefId).Name;
@@ -125,9 +126,10 @@ p.Ap--;
         item.CardDefId = ""; // 箱子保留在地图上，变为空箱
         Log(MakeEvt(p, "open", hidden ? "悄悄从木箱取走了什么" : $"从「木箱」中取走了什么", "似乎在从木箱拿东西", "有人在摆弄东西", null, hidden, p.Pos));
         LogActorText(p, $"你获得了技能卡：{cardName}。");
+        BroadcastVague(p.Pos, "远处有人在翻找木箱");
     }
 
-    private void DoMedkit(PlayerActor p)
+private void DoMedkit(PlayerActor p)
     {
         var items = ItemsAt(p.Pos);
         var item = items.FirstOrDefault(i => i.Kind == ItemKind.Medkit);
@@ -135,9 +137,11 @@ p.Ap--;
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
         p.Ap--;
         item.Consumed = true;
-        HealActor(p, p);
-        Log(MakeEvt(p, "medkit", "使用了医疗包治疗自己", "在处理伤口", "有人在摆弄东西", null, false, p.Pos));
-        LogActorText(p, "你恢复 1 点 HP。");
+        var hidden = HasEffect(p, CardEffect.Stealth);
+        TryStealthFor(p, out _);
+        p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = "medkit" });
+        Log(MakeEvt(p, "medkit", hidden ? "悄悄收起了医疗包" : "拾取了医疗包", "似乎在捡拾什么", "有人在摆弄东西", null, hidden, p.Pos));
+        LogActorText(p, "你拾取了医疗包（治疗卡），可在需要时使用。");
     }
 
     // ---------- 交谈 ----------
@@ -209,10 +213,11 @@ p.Ap--;
         p.Ap--;
         npc.ItemIntact = false;
         p.CarriedCase = npc.CaseId;
-        var hidden = TryStealthFor(p, out _);
+var hidden = TryStealthFor(p, out _);
         Log(MakeEvt(p, "steal", hidden ? "贴近贵宾，悄悄取走了某物" : "从贵宾身上窃取了财物！", "与贵宾十分贴近", "有人在活动", npc.Code, hidden, p.Pos));
         LogActorText(p, $"你窃取了 {npc.CaseColor} 案财物！现在前往撤离点核验。");
         PushOut(p.SeatIndex, Msg("你已窃得财物，需要活着抵达撤离点。"));
+        BroadcastVague(p.Pos, "远处似乎发生了盗窃");
     }
 
     // ---------- 自由阶段使用卡牌 ----------
@@ -307,7 +312,7 @@ p.Ap--;
             case CardEffect.Glue:
                 CastGlue(p, cmd, hidden);
                 break;
-            case CardEffect.Gun:
+case CardEffect.Gun:
             case CardEffect.Knife:
                 PushOut(p.SeatIndex, Msg("攻击卡只能用于战斗。"));
                 break;
@@ -315,6 +320,9 @@ p.Ap--;
                 PushOut(p.SeatIndex, Msg("该效果暂未开放。"));
                 break;
         }
+        // 隐藏类技能（隐身/伪装）不广播远处情报
+        if (def.Fx is not (CardEffect.Stealth or CardEffect.Disguise or CardEffect.Gun or CardEffect.Knife))
+            BroadcastVague(p.Pos, "远处有人在使用技能/道具");
     }
 
     private void ApplyHealTarget(PlayerActor healer, int? targetId, bool hidden)
@@ -454,9 +462,11 @@ case CardEffect.Drone:
                 ConsumeCard(p, ci);
                 ApplyHealTarget(p, cmd.TargetActorId, true);
                 break;
-            default:
+default:
                 return false;
         }
+        if (def.Fx != CardEffect.Disguise)
+            BroadcastVague(p.Pos, "远处有人在进行探查/查验");
         return true;
     }
 

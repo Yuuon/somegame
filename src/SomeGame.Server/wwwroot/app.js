@@ -117,6 +117,9 @@
     $('s-hp').textContent = v.hp;
     $('s-ap').textContent = v.ap;
     $('s-countdown').textContent = v.protectedCountdown >= 0 ? v.protectedCountdown : '?';
+    const ext = $('s-extraction');
+    ext.textContent = v.extractionHint || (v.extractionVisible ? '★' : '未知');
+    ext.classList.toggle('revealed', !!v.extractionVisible);
     $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
     $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
     if (v.medkitHints && v.medkitHints.length) {
@@ -316,7 +319,7 @@
         let action = null;
         if (pendingItem && canAct) { label = `对「${it.label}」布置陷阱`; clickable = true; action = () => itemClick(it, 'glue'); }
         else if (it.kind === 'Chest' && canAct) { label = it.label; clickable = true; action = () => itemClick(it, 'open'); }
-        else if (it.kind === 'Medkit' && canAct) { label = it.label + '（+1HP）'; clickable = true; action = () => itemClick(it, 'medkit'); }
+        else if (it.kind === 'Medkit' && canAct) { label = '拾取医疗包'; clickable = true; action = () => itemClick(it, 'medkit'); }
         b.className = 'cellitem' + (clickable ? ' clickable' : '');
         b.textContent = label;
         if (action) b.onclick = action;

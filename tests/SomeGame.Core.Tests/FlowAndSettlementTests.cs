@@ -331,6 +331,71 @@ public class FlowTests
         Assert.Empty(v2.MedkitHints);
     }
 
+    [Fact]
+    public void MedkitPickup_GrantsCard_NotInstantHeal()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        var med = (CellPos?)null;
+        for (int x = 0; x < 11 && med == null; x++)
+            for (int y = 0; y < 11; y++)
+                if (g.ItemsAt(new CellPos(x, y)).Any(i => i.Kind == ItemKind.Medkit))
+                { med = new CellPos(x, y); break; }
+        Assert.NotNull(med);
+        p.Pos = med.Value;
+        int before = p.Hp;
+        g.SubmitFree(0, new FreeCmd("medkit"));
+        Assert.Equal(before, p.Hp);                                  // 不立即治疗
+        Assert.Contains(p.Hand, h => h.DefId == "medkit");           // 以卡片入手
+    }
+
+    [Fact]
+    public void TempCards_AutoDiscarded_AtNextRoundStart()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        p.Hand.Add(new CardInstance { Id = 9901, DefId = "gun_temp", Temp = true });
+        int guard = 0;
+        while (!g.Terminal && g.Round < 2 && guard++ < 1000)
+        {
+            if (g.Stage == Stage.Free && g.Await?.SeatIndex == 0 && g.Await.Kind == AwaitKind.FreeAction)
+                g.SubmitFree(0, new FreeCmd("finish"));
+            else if (g.Stage == Stage.Check && g.Await?.SeatIndex == 0)
+                g.SubmitCheck(0, new CheckCmd(Skip: true));
+            else g.Continue();
+        }
+        Assert.False(p.Hand.Any(h => h.Id == 9901), "虚无卡应在回合结束时自动消耗");
+    }
+
+    [Fact]
+    public void NotableAction_BroadcastsVagueIntel_ToDistantPlayers()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        Item? chest = null;
+        CellPos chestCell = default;
+        for (int x = 0; x < 11 && chest == null; x++)
+            for (int y = 0; y < 11; y++)
+            {
+                var it = g.ItemsAt(new CellPos(x, y)).FirstOrDefault(i => i.Kind == ItemKind.Chest && i.CardDefId.Length > 0 && !i.TrappedGlue);
+                if (it != null) { chest = it; chestCell = new CellPos(x, y); break; }
+            }
+        Assert.NotNull(chest);
+        p.Pos = chestCell;
+        var farBot = g.Players.First(x => x.IsBot);
+        for (int x = 0; x < 11; x++)
+            for (int y = 0; y < 11; y++)
+                if (CellPos.Manhattan(chestCell, new CellPos(x, y)) > 2)
+                { farBot.Pos = new CellPos(x, y); break; }
+        g.DrainOutbox(farBot.SeatIndex); // 清空旧消息
+        g.SubmitFree(0, new FreeCmd("open", ItemId: chest.Id));
+        var drained = g.DrainOutbox(farBot.SeatIndex);
+        Assert.Contains(drained, m => m is LogOut lo && lo.Kind == "vague");
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

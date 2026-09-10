@@ -17,6 +17,7 @@ public partial class Game
         foreach (var p in Players)
         {
             if (p.IsObserver) continue;
+            p.Hand.RemoveAll(h => h.Temp); // 虚无卡：回合结束未使用则自动消耗
             p.Ap = Cfg.Turn.ApPerRound;
             p.FinishedFree = false;
             p.MovedThisRound = false;
@@ -301,6 +302,10 @@ public partial class Game
 
         Round++;
         if (Round > Cfg.Turn.MaxRounds) { Finish("回合上限，未分胜负"); return; }
+        if (Round == 5)
+            AnnounceAll(new LogOut(-1, "撤离点位置已对保镖与受保护贵宾公开！", 0, null, null, "event", false));
+        if (Round == 10)
+            AnnounceAll(new LogOut(-1, "撤离点位置已对全体玩家公开！", 0, null, null, "event", false));
         StepCellsTimers();
         if (Round % Cfg.Turn.RefillMapEveryNRounds == 0) RefillDiscardToMap();
         EnterFree();

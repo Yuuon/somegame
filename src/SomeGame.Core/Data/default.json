@@ -57,6 +57,7 @@
     { "id": "shield", "name": "防暴盾", "effect": "shield", "category": "defense", "phases": ["battle", "free", "check"], "target": "self", "hideable": false },
     { "id": "stealth", "name": "隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "hideable": false },
     { "id": "heal", "name": "治疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1 },
+    { "id": "medkit", "name": "医疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1 },
     { "id": "aim", "name": "瞄准狙击", "effect": "aim", "category": "utility", "phases": ["free", "check", "battle"], "target": "self" },
     { "id": "rapidfire", "name": "快速连射", "effect": "rapidfire", "category": "utility", "phases": ["free", "check", "battle"], "target": "self" },
     { "id": "smoke", "name": "烟雾弹", "effect": "smoke", "category": "utility", "phases": ["free", "battle"], "target": "selfcell", "duration": 2 },

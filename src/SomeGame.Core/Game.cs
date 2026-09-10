@@ -271,6 +271,18 @@ public partial class Game
         "知微", "见著", "沉璧", "渡影",
     };
 
+    // 远处情报：对视野外的玩家广播"异常举动"的大致方向（不暴露身份与精确位置）
+    public void BroadcastVague(CellPos at, string text)
+    {
+        var region = CoarseRegion(at);
+        foreach (var q in Players)
+        {
+            if (q.Dead || q.Pos == at) continue;
+            if (CellPos.Manhattan(q.Pos, at) <= 2) continue;
+            PushOut(q.SeatIndex, new LogOut(-1, $"【远处情报】{text}（{region}附近）", 2, at.X, at.Y, "vague", false));
+        }
+    }
+
     // ---------- 日志事件 ----------
     public void Log(ActionEvt e)
     {

@@ -88,6 +88,9 @@ public partial class Game
         // 撤离点可见性：前5回合保密；第5回合开放给保镖；暴露即对全体开放；第10回合无条件开放
         bool extractionVisible = Round >= 10 ||
             (Round >= 5 && (p.Role == RoleId.Bodyguard || ProtectedNpcs.Any(n => n.Exposed)));
+        string extractionHint = extractionVisible
+            ? $"撤离点位于{CoarseRegion(Extraction)}（距你 {CellPos.Manhattan(p.Pos, Extraction)} 格）"
+            : "撤离点位置未知";
 
         return new ViewOut
         {
@@ -106,6 +109,7 @@ public partial class Game
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,
             ExtractionVisible = extractionVisible,
+            ExtractionHint = extractionHint,
             Role = RoleDisplay(p),
             RoleKey = p.Role.ToString().ToLowerInvariant(),
             RoleColor = p.CaseId >= 0 ? PlanColor(p.CaseId) : "",
@@ -145,6 +149,17 @@ public partial class Game
             return "木箱";
         }
         return it.Label;
+    }
+
+    private string CoarseRegion(CellPos c)
+    {
+        int cx = Width / 2, cy = Height / 2;
+        string xr = c.X < cx ? "西" : c.X > cx ? "东" : "";
+        string yr = c.Y < cy ? "北" : c.Y > cy ? "南" : "";
+        if (xr.Length == 0 && yr.Length == 0) return "地图中部";
+        if (xr.Length == 0) return yr + "部";
+        if (yr.Length == 0) return xr + "部";
+        return xr + yr + "部";
     }
 
     private static string? EffectLabel(CardEffect e) => e switch
