@@ -20,6 +20,10 @@ dotnet run --project src/SomeGame.Server
 | `SOMEGAME_PORT` | `5123` | 监听端口 |
 | `SOMEGAME_DECISION_MS` | `60000` | 真人决策超时（毫秒），测试可设小值 |
 
+## 远端 Linux 部署
+
+部署目标机器为 Linux 时，见 [`docs/deploy-remote-linux.md`](docs/deploy-remote-linux.md)（含供 LLM agent 自主执行的步骤与一键脚本 `deploy/install-somegame.sh`）。
+
 ## 测试
 
 ```bash
