@@ -144,6 +144,15 @@ public class SpawnTests
     }
 
     [Fact]
+    public void Board_CoversWholeMap_WithUnexploredCells()
+    {
+        var g = FourBots(1);
+        var v = g.BuildView(g.Player(0));
+        Assert.Equal(v.MapW * v.MapH, v.Cells.Count);
+        Assert.Contains(v.Cells, c => c.Tier == -1); // 视野外为未探索格
+    }
+
+    [Fact]
     public void Extraction_Visibility_Gated()
     {
         var g = FourBots(1);
@@ -155,18 +164,24 @@ public class SpawnTests
 
         // 第5回合：保镖可见
         typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 5 });
-        Assert.True(g.BuildView(b).ExtractionVisible);
+        var vb = g.BuildView(b);
+        Assert.True(vb.ExtractionVisible);
+        Assert.True(vb.ExtractionExact); // 保镖获得精确坐标
         var k = g.Players.First(p => p.Role == RoleId.Killer);
         Assert.False(g.BuildView(k).ExtractionVisible);
 
-        // 身份暴露：对全体开放
+        // 身份暴露：对全体开放（非保镖仍模糊）
         g.ProtectedNpcs[0].Exposed = true;
-        Assert.True(g.BuildView(k).ExtractionVisible);
+        var vk = g.BuildView(k);
+        Assert.True(vk.ExtractionVisible);
+        Assert.False(vk.ExtractionExact);
 
-        // 第10回合：无条件开放
+        // 第10回合：无条件开放（非保镖仍模糊）
         g.ProtectedNpcs[0].Exposed = false;
         typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 10 });
-        Assert.True(g.BuildView(k).ExtractionVisible);
+        var vk2 = g.BuildView(k);
+        Assert.True(vk2.ExtractionVisible);
+        Assert.False(vk2.ExtractionExact);
     }
 
     [Fact]

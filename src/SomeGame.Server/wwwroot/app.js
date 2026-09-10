@@ -156,13 +156,10 @@
     const hintEl = $('board-hint');
     hintEl.textContent = hint;
     hintEl.style.display = hint ? '' : 'none';
-    const fullMap = state.pending && isCellTarget(state.pending);
-    const cells = fullMap
-      ? Array.from({ length: v.mapW * v.mapH }, (_, i) => ({ x: i % v.mapW, y: Math.floor(i / v.mapW), tier: 2 }))
-      : (v.cells || []);
+    const cells = v.cells || [];
     const maxX = Math.max(...cells.map(c => c.x), 0);
     const maxY = Math.max(...cells.map(c => c.y), 0);
-    board.style.gridTemplateColumns = `repeat(${maxX + 1}, 44px)`;
+    board.style.gridTemplateColumns = `repeat(${maxX + 1}, var(--cellsize))`;
     board.innerHTML = '';
     const byKey = {};
     cells.forEach(c => byKey[c.x + ',' + c.y] = c);
@@ -171,15 +168,15 @@
       const div = document.createElement('div');
       if (!c) { div.className = 'cell'; board.appendChild(div); continue; }
       div.className = 'cell tier' + c.tier + (x === v.x && y === v.y ? ' me' : '') +
-        (x === v.extractionX && y === v.extractionY && v.extractionVisible ? ' extraction' : '') +
+        (x === v.extractionX && y === v.extractionY && v.extractionExact ? ' extraction' : '') +
         (c.burning ? ' burning' : '') + (c.smoky ? ' smoky' : '');
-      if (x === v.extractionX && y === v.extractionY && v.extractionVisible) {
+      if (x === v.extractionX && y === v.extractionY && v.extractionExact) {
         const t = document.createElement('span');
         t.className = 'who';
         t.textContent = '★撤离点';
         div.appendChild(t);
       }
-      if (!fullMap) {
+      if (c.tier >= 0) {
         if (c.occupants.length) {
           c.occupants.forEach(code => {
             const t = document.createElement('span');

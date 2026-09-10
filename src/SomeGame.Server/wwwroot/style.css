@@ -8,6 +8,7 @@
   --warn: #ffd166;
   --bad: #ef476f;
   --ok: #06d6a0;
+  --cellsize: 36px;
 }
 * { box-sizing: border-box; }
 body { margin:0; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
@@ -26,7 +27,8 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 #leftcol { width: 210px; flex: 0 0 210px; display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height: 70vh; }
 #board-wrap { flex: 1 1 auto; overflow:auto; }
 #board { display:grid; gap:2px; width:max-content; margin:auto; }
-.cell { width:44px; height:44px; border-radius:4px; border:1px solid #2a3142; background:#1a1f2c; position:relative; text-align:center; }
+.cell { width: var(--cellsize); height: var(--cellsize); border-radius:4px; border:1px solid #2a3142; background:#1a1f2c; position:relative; text-align:center; }
+.cell.tier-1 { background:#0d111a; }
 .cell.tier1 { background:#171b26; }
 .cell.tier2 { background:#141720; }
 .cell.me { outline:2px solid var(--accent); }

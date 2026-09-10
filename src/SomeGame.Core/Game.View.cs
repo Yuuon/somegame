@@ -16,19 +16,22 @@ public partial class Game
 
         var cells = new List<CellOut>();
         var center = p.Pos;
+        // 棋盘始终渲染整张地图：视野外为未探索空白（tier=-1），便于移动/疾走/无人机等远距离选择
         for (int x = 0; x < Width; x++)
         for (int y = 0; y < Height; y++)
         {
             var c = new CellPos(x, y);
             var d = CellPos.Manhattan(center, c);
-            if (!p.IsObserver && d > 2) continue;
-            int tier = p.IsObserver ? 0 : d;
-            var occ = Occupants(c);
+            int tier = p.IsObserver ? 0 : (d > 2 ? -1 : d);
             var occList = new List<string>();
-            if (tier <= 1 || p.IsObserver)
-                occList.AddRange(occ.Select(a => a.Code));
-            else if (occ.Count > 0)
-                occList.Add($"{occ.Count}人");
+            if (tier >= 0)
+            {
+                var occ = Occupants(c);
+                if (tier <= 1 || p.IsObserver)
+                    occList.AddRange(occ.Select(a => a.Code));
+                else if (occ.Count > 0)
+                    occList.Add($"{occ.Count}人");
+            }
 
             var itemList = new List<string>();
             var interactables = new List<ItemRefOut>();
@@ -55,8 +58,8 @@ public partial class Game
                 Occupants = occList,
                 Items = itemList,
                 Interactables = interactables,
-                Burning = _burn.TryGetValue(c, out var bb) && bb > 0,
-                Smoky = _smoke.TryGetValue(c, out var ss) && ss > 0,
+                Burning = tier >= 0 && _burn.TryGetValue(c, out var bb) && bb > 0,
+                Smoky = tier >= 0 && _smoke.TryGetValue(c, out var ss) && ss > 0,
             });
         }
 
@@ -113,6 +116,7 @@ public partial class Game
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,
             ExtractionVisible = extractionVisible,
+            ExtractionExact = extractionVisible && p.Role == RoleId.Bodyguard,
             ExtractionHint = extractionHint,
             Role = RoleDisplay(p),
             RoleKey = p.Role.ToString().ToLowerInvariant(),

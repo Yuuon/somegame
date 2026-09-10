@@ -133,6 +133,7 @@ public sealed class ViewOut
     public int ExtractionX { get; init; }
     public int ExtractionY { get; init; }
     public bool ExtractionVisible { get; init; }
+    public bool ExtractionExact { get; init; }
     public string ExtractionHint { get; init; } = "";
     public string MyCode { get; init; } = "";
     public string Role { get; init; } = "";
