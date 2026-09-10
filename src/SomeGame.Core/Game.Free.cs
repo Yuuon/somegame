@@ -157,6 +157,18 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
         { PushOut(p.SeatIndex, Msg("交谈对象须与你同格。")); return; }
 p.Ap--;
         Log(MakeEvt(p, "talk", $"和「{target.Code}」交谈了一会儿", "在和谁说话", "有人在说话", target.Code, false, p.Pos));
+        // 与平民交谈：恐慌者告知出事坐标；且有几率获得随机临时卡（单消耗）
+        if (target is NpcActor decoy && decoy.Kind == ActorKind.DecoyNpc)
+        {
+            if (decoy.PanicTurns > 0 && decoy.PanicSource is { } src)
+                PushOut(p.SeatIndex, Msg($"「{decoy.Code}」惊恐地说：那边 {src} 出事了！"));
+            if (Rng.Chance(0.3))
+            {
+                var reward = RandomTempCardDef();
+                p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = reward, Temp = true, Void = false });
+                PushOut(p.SeatIndex, Msg($"「{decoy.Code}」悄悄塞给你一张卡片：{Cfg.Card(reward).Name}。"));
+            }
+        }
         // 保镖与其守护贵宾交谈 = 催促移动（撤离点对贵宾/保镖开放后，第5回合起）
         if (p.Role == RoleId.Bodyguard && Round >= 5 &&
             target is NpcActor npc && npc.Kind == ActorKind.ProtectedNpc && npc.CaseId == p.CaseId && !npc.Dead)
@@ -210,7 +222,9 @@ p.Ap--;
             PushOut(p.SeatIndex, Msg("此格没有你目标案的贵宾（或财物已被取走）。"));
             return;
         }
-        if (p.CarriedCase >= 0) { PushOut(p.SeatIndex, Msg("你已携带着财物。")); return; }
+if (p.CarriedCase >= 0) { PushOut(p.SeatIndex, Msg("你已携带着财物。")); return; }
+        if (p.VerifiedVipCaseId != npc.CaseId && !npc.Exposed)
+        { PushOut(p.SeatIndex, Msg("你尚未查验出这位贵宾的身份，无法窃取。")); return; }
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
         p.Ap--;
         npc.ItemIntact = false;
@@ -352,10 +366,11 @@ case CardEffect.Gun:
         if (target.Hp < max) target.Hp++;
     }
 
-    private void GrantTemp(PlayerActor p, string defId, int count)
+private void GrantTemp(PlayerActor p, string defId, int count)
     {
+        var def = Cfg.Card(defId);
         for (int i = 0; i < count; i++)
-            p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = defId, Temp = true });
+            p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = def.Id, Temp = def.Temp, Void = def.Void });
     }
 
     private void CastSmoke(PlayerActor p, bool hidden)

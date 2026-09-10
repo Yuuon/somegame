@@ -371,7 +371,8 @@ public class FlowTests
         var g = GameWithOneHuman();
         g.Continue();
         var p = g.Player(0);
-        p.Hand.Add(new CardInstance { Id = 9901, DefId = "gun_temp", Temp = true });
+        p.Hand.Add(new CardInstance { Id = 9901, DefId = "gun_temp", Temp = true, Void = true }); // 虚无卡
+        p.Hand.Add(new CardInstance { Id = 9902, DefId = "stealth", Temp = true, Void = false }); // 单消耗临时卡（保留）
         int guard = 0;
         while (!g.Terminal && g.Round < 2 && guard++ < 1000)
         {
@@ -382,6 +383,7 @@ public class FlowTests
             else g.Continue();
         }
         Assert.False(p.Hand.Any(h => h.Id == 9901), "虚无卡应在回合结束时自动消耗");
+        Assert.True(p.Hand.Any(h => h.Id == 9902), "单消耗临时卡应跨回合保留");
     }
 
     [Fact]
@@ -479,6 +481,74 @@ public class FlowTests
         g.ProtectedNpcs[0].Exposed = true;
         Assert.True(g.BuildView(k).ExtractionVisible);
         Assert.DoesNotContain(exact, g.BuildView(k).ExtractionHint); // 他人保持模糊
+    }
+
+    [Fact]
+    public void Thief_Steal_RequiresVerifyVip()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        var g = new Game(cfg, 5, new[]
+        {
+            new SeatIn("BG", true), new SeatIn("K", true), new SeatIn("T", false), new SeatIn("M", true),
+        }, shuffleRoles: false); // seat2 恒为小偷（人类）
+        g.Continue();
+        int guard = 0;
+        while (g.Stage != Stage.Terminal && (g.Await == null || g.Await.SeatIndex != 2) && guard++ < 300)
+            g.Continue();
+        Assert.Equal(2, g.Await!.SeatIndex);
+        var t = g.Player(2);
+        var npc = g.ProtectedOfCase(0);
+        npc.Pos = t.Pos;
+        t.Ap = 3;
+        g.SubmitFree(2, new FreeCmd("steal"));
+        Assert.Equal(-1, t.CarriedCase); // 未验出身份无法窃取
+        t.VerifiedVipCaseId = 0;
+        g.SubmitFree(2, new FreeCmd("steal"));
+        Assert.Equal(0, t.CarriedCase); // 验出后可窃取
+    }
+
+    [Fact]
+    public void PanicFleeAround_MarksCivilians()
+    {
+        var g = GameWithOneHuman();
+        var decoy = g.Decoys.First();
+        decoy.Pos = new CellPos(5, 5);
+        g.PanicFleeAround(new CellPos(5, 5));
+        Assert.True(decoy.PanicTurns > 0);
+        Assert.Equal(new CellPos(5, 5), decoy.PanicSource);
+    }
+
+    [Fact]
+    public void TalkToPanickedCivilian_RevealsCoords()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        var decoy = g.Decoys.First();
+        decoy.Pos = p.Pos;
+        decoy.PanicTurns = 2;
+        decoy.PanicSource = new CellPos(5, 7);
+        g.DrainOutbox(0);
+        g.SubmitFree(0, new FreeCmd("talk", ActorId: decoy.Id));
+        var msgs = g.DrainOutbox(0);
+        Assert.Contains(msgs, m => m is LogOut lo && lo.Text.Contains("[5,7]"));
+    }
+
+    [Fact]
+    public void Vip_UsesNeutralMaskedCode()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 13;
+        cfg.Map.Height = 13;
+        var g = new Game(cfg, 1, new[]
+        {
+            new SeatIn("A", true), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+        var npc = g.ProtectedNpcs[0];
+        Assert.DoesNotContain("案贵宾", npc.Code); // 对外掩盖身份，使用中立代号
+        Assert.Contains(npc.Code, g.ObjectiveText(g.Players.First(p => p.Role == RoleId.Killer), "红"));
     }
 
     private static Game GameWithOneHuman()

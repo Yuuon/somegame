@@ -114,6 +114,7 @@ public sealed class CardDef
     public int Duration { get; set; }
     public string? GenCard { get; set; }
     public bool Temp { get; set; }
+    public bool Void { get; set; }
     public bool Hideable { get; set; }
 
     public CardEffect Fx => Enum.TryParse<CardEffect>(Effect, true, out var e) ? e : CardEffect.None;

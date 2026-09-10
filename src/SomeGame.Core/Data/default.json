@@ -4,9 +4,9 @@
     "width": 15,
     "height": 15,
     "coverItemCount": 8,
-    "medkitItemCount": 10,
-    "emptyChestCount": 10,
-    "decoyNpcCount": 14,
+    "medkitItemCount": 12,
+    "emptyChestCount": 16,
+    "decoyNpcCount": 36,
     "droneRange": 10,
     "extractionAtCenter": true
   },
@@ -73,10 +73,10 @@
     { "id": "dye", "name": "染色球", "effect": "dye", "category": "utility", "phases": ["free", "check"], "target": "actor" },
     { "id": "molotov", "name": "燃烧瓶", "effect": "molotov", "category": "utility", "phases": ["free"], "target": "cell", "range": 2, "duration": 2 },
     { "id": "glue", "name": "万能胶", "effect": "glue", "category": "utility", "phases": ["free"], "target": "selfcell" },
-    { "id": "gun_temp", "name": "临时枪械", "effect": "gun", "category": "attack", "phases": ["battle"], "target": "actor", "range": 2, "temp": true },
-    { "id": "knife_temp", "name": "临时刀械", "effect": "knife", "category": "attack", "phases": ["battle"], "target": "actor", "range": 1, "temp": true },
-    { "id": "stealth_temp", "name": "临时隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "temp": true },
-    { "id": "medkit_temp", "name": "临时医疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1, "temp": true }
+    { "id": "gun_temp", "name": "临时枪械", "effect": "gun", "category": "attack", "phases": ["battle"], "target": "actor", "range": 2, "temp": true, "void": true },
+    { "id": "knife_temp", "name": "临时刀械", "effect": "knife", "category": "attack", "phases": ["battle"], "target": "actor", "range": 1, "temp": true, "void": true },
+    { "id": "stealth_temp", "name": "临时隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "temp": true, "void": true },
+    { "id": "medkit_temp", "name": "临时医疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1, "temp": true, "void": true }
   ],
   "deck": [
     { "cardId": "gun", "count": 16 },

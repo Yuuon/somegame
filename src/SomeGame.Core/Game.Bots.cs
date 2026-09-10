@@ -91,23 +91,29 @@ public partial class Game
         }
         else if (p.Role == RoleId.Madman)
         {
-            target = Players.Where(x => !x.Dead && x.Id != p.Id && x.Role != RoleId.Madman)
+            var enemy = Players.Where(x => !x.Dead && x.Id != p.Id && x.Role != RoleId.Madman)
                 .OrderBy(x => CellPos.Manhattan(p.Pos, x.Pos)).FirstOrDefault();
+            if (enemy != null && CellPos.Manhattan(p.Pos, enemy.Pos) <= 2) target = enemy;
+            else
+            {
+                // 无敌人可及时可伤害平民NPC
+                target = Decoys.Where(x => !x.Dead && CellPos.Manhattan(p.Pos, x.Pos) <= 2)
+                    .OrderBy(x => CellPos.Manhattan(p.Pos, x.Pos)).FirstOrDefault();
+            }
         }
         else { NextCheckSeat(); return; }
 
         if (target == null) { NextCheckSeat(); return; }
+        // 杀手需先查验确认贵宾身份（在判定可否开战之前）
+        if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc && p.CaseId == n.CaseId &&
+            p.VerifiedVipCaseId != n.CaseId && !n.Exposed)
+        {
+            var res = RevealCheck(p, target);
+            _ = res;
+        }
         var d = CellPos.Manhattan(p.Pos, target.Pos);
         if (d <= 2 && CanStartBattleVs(p, target) && HasRangeAttack(p, d))
         {
-            if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc && p.CaseId == n.CaseId && !n.Dead)
-            {
-                TryStartBattle(p, target.Id);
-                return;
-            }
-            // 先走查验（不向 bot 推送结果），随后开战
-            var res = RevealCheck(p, target);
-            _ = res;
             TryStartBattle(p, target.Id);
             return;
         }

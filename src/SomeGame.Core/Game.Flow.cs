@@ -17,7 +17,7 @@ public partial class Game
         foreach (var p in Players)
         {
             if (p.IsObserver) continue;
-            p.Hand.RemoveAll(h => h.Temp); // 虚无卡：回合结束未使用则自动消耗
+            p.Hand.RemoveAll(h => h.Void); // 虚无卡：回合结束未使用则自动消耗（单消耗临时卡保留）
             p.Ap = Cfg.Turn.ApPerRound;
             p.FinishedFree = false;
             p.MovedThisRound = false;
@@ -39,7 +39,7 @@ public partial class Game
         var def = Cfg.Role(p.Role.ToString().ToLowerInvariant());
         if (def.SupplyCard == null) return;
         var cdef = Cfg.Card(def.SupplyCard);
-        p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = cdef.Id, Temp = true });
+        p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = cdef.Id, Temp = cdef.Temp, Void = cdef.Void });
         PushOut(p.SeatIndex, new LogOut(-1, $"你获得了本回合固定补给：{cdef.Name}", 0, null, null, "card", false));
 
         // 保镖：自己或守护贵宾受伤时，额外生成一张临时医疗包
@@ -50,7 +50,8 @@ public partial class Game
             bool injured = p.Hp < maxSelf || (vip != null && vip.Hp < Cfg.ProtectedNpcHp);
             if (injured)
             {
-                p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = "medkit_temp", Temp = true });
+                var extra = Cfg.Card("medkit_temp");
+                p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = extra.Id, Temp = extra.Temp, Void = extra.Void });
                 PushOut(p.SeatIndex, new LogOut(-1, "你或贵宾受伤，额外获得一张临时医疗包。", 0, null, null, "card", false));
             }
         }
@@ -233,8 +234,15 @@ public partial class Game
     {
         if (target.Kind == ActorKind.Player)
             return IsEnemyOf(Cfg, attacker.Role, ((PlayerActor)target).Role);
-        if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc)
-            return attacker.Role == RoleId.Killer && attacker.CaseId == n.CaseId;
+        if (target is NpcActor n)
+        {
+            if (n.Kind == ActorKind.ProtectedNpc)
+                // 以贵宾为目标须先验出其身份
+                return attacker.Role == RoleId.Killer && attacker.CaseId == n.CaseId &&
+                       (attacker.VerifiedVipCaseId == n.CaseId || n.Exposed);
+            // 疯子可伤害平民NPC
+            return attacker.Role == RoleId.Madman;
+        }
         return false;
     }
 
@@ -266,8 +274,10 @@ public partial class Game
                 if (!npc.Exposed)
                 {
                     npc.Exposed = true;
+                    verifier.VerifiedVipCaseId = npc.CaseId;
                     AnnounceAll(new LogOut(-1, $"「{npc.Code}」的身份暴露了——它是 {npc.CaseColor}案贵宾！", 0, null, null, "event", false));
                 }
+                else verifier.VerifiedVipCaseId = npc.CaseId;
                 return (npc.CaseColor + "案贵宾", npc.ItemIntact ? "随身财物尚在。" : "财物已被窃走。");
             }
             return ("平民", "");

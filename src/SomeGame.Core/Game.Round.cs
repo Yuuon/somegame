@@ -9,14 +9,30 @@ public partial class Game
     {
         foreach (var n in Decoys.Where(d => !d.Dead).ToList())
         {
-            if (n.Dead || !Rng.Chance(0.45)) continue;
-            var nb = CellPos.OrthoAround(n.Pos).Where(InMap)
+            if (n.Dead) continue;
+            if (n.PanicTurns > 0)
+            {
+                // 恐慌中的平民持续逃窜
+                var nb = CellPos.OrthoAround(n.Pos).Where(InMap)
+                    .Where(c => !Actors.Any(a => !a.Dead && a.Pos == c)).ToList();
+                if (nb.Count > 0)
+                {
+                    var old = n.Pos;
+                    n.Pos = nb[Rng.Next(0, nb.Count)];
+                    n.LastOpText = "在惊慌逃窜";
+                    Log(ActionEvent(n.Id, "move", "惊恐逃窜", null, "有人慌乱跑过", null, false, old));
+                }
+                n.PanicTurns--;
+                continue;
+            }
+            if (!Rng.Chance(0.45)) continue;
+            var nb2 = CellPos.OrthoAround(n.Pos).Where(InMap)
                 .Where(c => !Actors.Any(a => !a.Dead && a.Pos == c)).ToList();
-            if (nb.Count == 0) continue;
-            var old = n.Pos;
-            n.Pos = nb[Rng.Next(0, nb.Count)];
+            if (nb2.Count == 0) continue;
+            var old2 = n.Pos;
+            n.Pos = nb2[Rng.Next(0, nb2.Count)];
             n.LastOpText = "在闲逛";
-            Log(ActionEvent(n.Id, "move", "缓步走过", "移动了", "有人移动了", null, false, old));
+            Log(ActionEvent(n.Id, "move", "缓步走过", "移动了", "有人移动了", null, false, old2));
         }
 
         foreach (var n in ProtectedNpcs.Where(p => !p.Dead).ToList())

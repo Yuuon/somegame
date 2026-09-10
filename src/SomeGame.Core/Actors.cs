@@ -26,6 +26,7 @@ public sealed class PlayerActor : ActorNode
     public List<CardInstance> Hand { get; } = new();
     public int CarriedCase { get; set; } = -1; // 财宝所属案
     public int CoverTargetId { get; set; } = -1; // 保镖当前掩护的对象（每回合重置）
+    public int VerifiedVipCaseId { get; set; } = -1; // 本人已查验确认的贵宾案（杀手/小偷行动前提）
     public HashSet<long> OpenedItems { get; } = new();   // 本人已开箱（知其空/满）
     public HashSet<long> ReconMaybes { get; } = new();   // 探查标记"可能有东西"的物品
     public bool IsObserver => Dead;
@@ -43,6 +44,8 @@ public sealed class NpcActor : ActorNode
     public bool Urged { get; set; }             // 本回合被保镖催促移动
     public bool Evacuated { get; set; }         // 已从撤离点撤离
     public int EvacWaitRounds { get; set; }     // 撤离点等待回合数
+    public int PanicTurns { get; set; }         // 平民NPC恐慌剩余回合
+    public CellPos? PanicSource { get; set; }   // 恐慌事发的坐标
     public List<string> LastActionLog { get; } = new(); // 装饰用
 }
 
@@ -51,6 +54,7 @@ public sealed class CardInstance
     public long Id { get; init; }
     public string DefId { get; init; } = "";
     public bool Temp { get; init; }
+    public bool Void { get; init; } // 虚无：回合结束未使用则自动消耗
 }
 
 public sealed class EffectState

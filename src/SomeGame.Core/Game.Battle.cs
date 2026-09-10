@@ -46,6 +46,8 @@ public partial class Game
 
         var e = ActionEvent(attacker.Id, "battle", "发动了战斗", null, "有人在冲突", opponent.Code, false, attacker.Pos);
         Log(e);
+        PanicFleeAround(attacker.Pos);
+        BroadcastVague(attacker.Pos, "远处传来了打斗声");
     }
 
     private bool BattleStep()

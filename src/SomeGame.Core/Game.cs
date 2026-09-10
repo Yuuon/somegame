@@ -68,7 +68,8 @@ public partial class Game
 
         RoleNamesAtStart = roleTokens.Select(t => t.Role.ToString()).ToArray();
 
-        var codes = BuildCodes(seats.Length + cfg.Map.DecoyNpcCount);
+        var decoyCount = Math.Max(cfg.Map.DecoyNpcCount, LatticeCount(Width, Height));
+        var codes = BuildCodes(seats.Length + decoyCount + plan.Cases.Length);
         int codeIdx = 0;
         for (int i = 0; i < seats.Length; i++)
         {
@@ -98,13 +99,25 @@ public partial class Game
 
         foreach (var c in plan.Cases)
         {
-            var npc = SpawnProtectedNpc(c.CaseIndex, c.Color);
+            // 受保护贵宾身份对外掩盖：使用中立代号
+            var npc = SpawnProtectedNpc(c.CaseIndex, c.Color, codes[codeIdx++]);
             ProtectedNpcs.Add(npc);
             Actors.Add(npc);
         }
-        for (int d = 0; d < cfg.Map.DecoyNpcCount; d++)
+
+        // 平民NPC：先按每3格网格放置以保证密度，再随机填充剩余
+        int lattice = LatticeCount(Width, Height);
+        int cols = (Width + 2) / 3;
+        for (int d = 0; d < decoyCount; d++)
         {
-            var npc = SpawnDecoy(codes[codeIdx++]);
+            CellPos? forced = null;
+            if (d < lattice)
+            {
+                var c = new CellPos(3 * (d % cols), 3 * (d / cols));
+                if (InMap(c) && !Actors.Any(a => !a.Dead && a.Pos == c) && c != Extraction)
+                    forced = c;
+            }
+            var npc = SpawnDecoy(codes[codeIdx++], forced);
             Decoys.Add(npc);
             Actors.Add(npc);
         }
@@ -188,6 +201,8 @@ public partial class Game
             result.Add(i < pool.Length ? pool[i] : $"行者{i + 1:D2}");
         return result;
     }
+
+    private static int LatticeCount(int w, int h) => ((w + 2) / 3) * ((h + 2) / 3);
 
     private void RepositionBodyguardsNearTarget()
     {
@@ -281,6 +296,31 @@ public partial class Game
             if (CellPos.Manhattan(q.Pos, at) <= 2) continue;
             PushOut(q.SeatIndex, new LogOut(-1, $"【远处情报】{text}（{region}附近）", 2, at.X, at.Y, "vague", false));
         }
+    }
+
+    // 平民NPC恐慌：距离2以内的平民进入恐慌并逃窜
+    public void PanicFleeAround(CellPos center)
+    {
+        foreach (var n in Decoys.Where(d => !d.Dead).ToList())
+        {
+            if (CellPos.Manhattan(n.Pos, center) > 2) continue;
+            n.PanicTurns = 2;
+            n.PanicSource = center;
+            var nb = CellPos.OrthoAround(n.Pos).Where(InMap)
+                .Where(c => !Actors.Any(a => !a.Dead && a.Pos == c)).ToList();
+            if (nb.Count > 0)
+            {
+                var old = n.Pos;
+                n.Pos = nb[Rng.Next(0, nb.Count)];
+                Log(ActionEvent(n.Id, "move", "惊恐逃窜", null, "有人慌乱跑过", null, false, old));
+            }
+        }
+    }
+
+    private string RandomTempCardDef()
+    {
+        var ids = Cfg.Deck.Select(d => d.CardId).ToList();
+        return ids[Rng.Next(0, ids.Count)];
     }
 
     // ---------- 日志事件 ----------

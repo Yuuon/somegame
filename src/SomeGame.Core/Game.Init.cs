@@ -92,15 +92,15 @@ public partial class Game
         return new CellPos(0, 0) == Extraction ? new CellPos(1, 0) : new CellPos(0, 0);
     }
 
-    private NpcActor SpawnProtectedNpc(int caseIdx, string color)
+    private NpcActor SpawnProtectedNpc(int caseIdx, string color, string code)
     {
-        // 距撤离点必须 >5（第6格及以上），保证撤离时间窗充足
+        // 距撤离点必须 >5（第6格及以上），保证撤离时间窗充足；身份对外用中立代号掩盖
         var pos = PlaceProtectedAway();
         return new NpcActor
         {
             Id = _nextActorId++,
             Kind = ActorKind.ProtectedNpc,
-            Code = color + "案贵宾",
+            Code = code,
             Pos = pos,
             Hp = Cfg.ProtectedNpcHp,
             CaseId = caseIdx,
@@ -111,14 +111,14 @@ public partial class Game
         };
     }
 
-    private NpcActor SpawnDecoy(string code)
+    private NpcActor SpawnDecoy(string code, CellPos? forced = null)
     {
         return new NpcActor
         {
             Id = _nextActorId++,
             Kind = ActorKind.DecoyNpc,
             Code = code,
-            Pos = RandFreeCellNoItem(),
+            Pos = forced ?? RandFreeCellNoItem(),
             Hp = 1,
             LastOpText = "在闲逛",
         };
@@ -126,11 +126,13 @@ public partial class Game
 
     public string ObjectiveText(PlayerActor p, string color)
     {
+        string? vip = p.CaseId >= 0 ? ProtectedNpcs.FirstOrDefault(n => n.CaseId == p.CaseId)?.Code : null;
+        string tgt = vip ?? (color + "案贵宾");
         return p.Role switch
         {
-            RoleId.Bodyguard => $"守护 {color}案贵宾 与其财物：贵宾存活抵达撤离点、且财物未被窃取即胜利。",
-            RoleId.Killer => $"击杀 {color}案贵宾，然后本人存活抵达撤离点核验即胜利。",
-            RoleId.Thief => $"窃取 {color}案财物，然后本人携物存活抵达撤离点核验即胜利。",
+            RoleId.Bodyguard => $"守护「{tgt}」（{color}案贵宾）与其财物：贵宾存活抵达撤离点、且财物未被窃取即胜利。",
+            RoleId.Killer => $"击杀「{tgt}」（{color}案贵宾）：先用身份查验验出其身份，然后本人存活抵达撤离点核验即胜利。",
+            RoleId.Thief => $"窃取「{tgt}」的财物（{color}案）：先用身份查验验出其身份，然后本人携物存活抵达撤离点核验即胜利。",
             RoleId.Madman => "清除本局所有保镖、杀手、小偷（全部死亡）即胜利。",
             _ => "",
         };
