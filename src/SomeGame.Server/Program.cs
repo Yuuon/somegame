@@ -81,27 +81,34 @@ internal sealed class Hub
 
     private void HandleMessage(Client client, string text)
     {
-        using var doc = JsonDocument.Parse(text);
-        var root = doc.RootElement;
-        var type = root.TryGetProperty("t", out var t) ? t.GetString() : "";
-
-        lock (_lock)
+        try
         {
-            switch (type)
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            var type = root.TryGetProperty("t", out var t) ? t.GetString() : "";
+
+            lock (_lock)
             {
-                case "create":
-                    CreateRoom(client, root);
-                    break;
-                case "join":
-                    JoinRoom(client, root);
-                    break;
-                case "start":
-                    StartRoom(client);
-                    break;
-                case "cmd":
-                    HandleCmd(client, root);
-                    break;
+                switch (type)
+                {
+                    case "create":
+                        CreateRoom(client, root);
+                        break;
+                    case "join":
+                        JoinRoom(client, root);
+                        break;
+                    case "start":
+                        StartRoom(client);
+                        break;
+                    case "cmd":
+                        HandleCmd(client, root);
+                        break;
+                }
             }
+        }
+        catch (Exception)
+        {
+            // 解析/处理异常不中断连接，忽略坏消息
         }
     }
 
@@ -115,8 +122,9 @@ internal sealed class Hub
         _rooms[roomId] = room;
         client.Name = name;
         client.RoomId = roomId;
-        room.Slots[0] = new Slot(name, client, false);
         client.Seat = 0;
+        room.HostConn = client;
+        room.Slots[0] = new Slot(name, client, false);
         _ = Send(client, new LobbyOut
         {
             RoomId = roomId,
@@ -144,7 +152,8 @@ internal sealed class Hub
     private void StartRoom(Client client)
     {
         if (client.RoomId == null || !_rooms.TryGetValue(client.RoomId, out var room)) return;
-        if (room.Game != null || room.HostName != client.Name) return;
+        if (room.Game != null) return;
+        if (room.HostConn != null && room.HostConn != client) return; // 房主在线时仅房主可开
         if (room.Slots.Count(s => s is { Conn: not null }) == 0) return;
 
         var seats = new SeatIn[room.Players];
@@ -241,7 +250,8 @@ internal sealed class Hub
             lock (_lock) rooms = _rooms.Values.ToArray();
             foreach (var room in rooms)
             {
-                lock (room)
+                // 与客户端命令、断线处理共用同一把锁，避免对同一对局并发写入
+                lock (_lock)
                 {
                     var g = room.Game;
                     if (g == null || g.Terminal) continue;
@@ -313,20 +323,23 @@ internal sealed class Hub
 
     private void BroadcastLobby(Room room)
     {
-        var lobby = new LobbyOut
-        {
-            RoomId = room.Id,
-            Players = room.Players,
-            Seats = room.Slots.Select((s, i) => new SeatOut(i, s?.Name ?? "", s?.Bot == true)).ToList(),
-            IsHost = false,
-        };
         foreach (var s in room.Slots)
-            if (s?.Conn is { } c) _ = Send(c, lobby);
+        {
+            if (s?.Conn is not { } c) continue;
+            _ = Send(c, new LobbyOut
+            {
+                RoomId = room.Id,
+                Players = room.Players,
+                Seats = room.Slots.Select((x, i) => new SeatOut(i, x?.Name ?? "", x?.Bot == true)).ToList(),
+                IsHost = c == room.HostConn,
+            });
+        }
     }
 
     private void OnDisconnect(Room room, Client client)
     {
         if (client.Seat == null) return;
+        if (client == room.HostConn) room.HostConn = null; // 房主离开后其他人可接管开局
         var slot = room.Slots[client.Seat.Value];
         if (slot == null) return;
         if (room.Game != null)
@@ -403,6 +416,7 @@ internal sealed class Room
     public string Id { get; }
     public int Players { get; }
     public string HostName { get; }
+    public Client? HostConn { get; set; }
     public Slot?[] Slots { get; }
     public Game? Game { get; set; }
     public DateTime Deadline { get; set; }

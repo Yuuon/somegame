@@ -116,6 +116,56 @@ public class FlowTests
     }
 
     [Fact]
+    public void HumanFree_LastApAction_AutoFinishes()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 2;
+        var g = new Game(cfg, 8, new[]
+        {
+            new SeatIn("H1", false), new SeatIn("B1", true), new SeatIn("B2", true), new SeatIn("B3", true),
+        });
+        g.Continue();
+        Assert.Equal(Stage.Free, g.Stage);
+        Assert.Equal(AwaitKind.FreeAction, g.Await!.Kind);
+        var p = g.Player(0);
+        p.Ap = 1; // 仅剩 1 行动点
+        var dest = new CellPos(p.Pos.X + 1, p.Pos.Y);
+        g.SubmitFree(0, new FreeCmd("move", X: dest.X, Y: dest.Y));
+        Assert.True(p.FinishedFree, "AP 归零后应自动结束本轮，而非卡在行动窗口");
+        Assert.Equal(dest, p.Pos);
+    }
+
+    [Fact]
+    public void BuildView_ExposesRoleKey()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 1;
+        var g = new Game(cfg, 9, new[]
+        {
+            new SeatIn("H1", false), new SeatIn("B1", true), new SeatIn("B2", true), new SeatIn("B3", true),
+        });
+        var v = g.BuildView(g.Player(0));
+        Assert.False(string.IsNullOrEmpty(v.RoleKey));
+        Assert.Contains(g.Player(0).Role.ToString().ToLowerInvariant(), v.RoleKey);
+    }
+
+    private static Game GameWithOneHuman()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 1;
+        return new Game(cfg, 10, new[]
+        {
+            new SeatIn("H1", false), new SeatIn("B1", true), new SeatIn("B2", true), new SeatIn("B3", true),
+        });
+    }
+
+    [Fact]
     public void HumanCheckSkip_AdvancesToNextSeat()
     {
         var cfg = GameConfig.Default();

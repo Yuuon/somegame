@@ -12,6 +12,7 @@
     objective: '',
     logs: [],
     myRole: '',
+    myRoleKey: '',
     myColor: '',
     host: false,
     pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
@@ -58,6 +59,7 @@
         state.view = msg;
         state.seat = msg.seat;
         state.myRole = msg.role;
+        state.myRoleKey = msg.roleKey;
         state.myColor = msg.roleColor;
         if (msg.objective) state.objective = msg.objective;
         state.inGame = true;
@@ -268,7 +270,8 @@
       return;
     }
     if (v.awaitKind === 'BattleDefense') {
-      send({ t: 'cmd', dodge: true, cardId: card.id });
+      if (card.defId === 'dodge') send({ t: 'cmd', dodge: true, cardId: card.id });
+      else appendLog({ text: '防御阶段只能使用「闪避」。', kind: 'info', tier: 0 });
       return;
     }
     const kind = v.awaitKind === 'CheckAction' ? 'checkCard' : 'freeCard';
@@ -311,7 +314,7 @@
           if (it.kind === 'Medkit') btn('使用医疗包(+1HP)', '', () => itemClick(it, 'medkit'));
         });
       }
-      if (state.myRole === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
+      if (state.myRoleKey === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
       btn('结束本轮行动', 'primary', () => send({ t: 'cmd', op: 'finish' }));
       if (state.pending && state.pending.kind === 'freeCard') {
         const cancel = document.createElement('button');

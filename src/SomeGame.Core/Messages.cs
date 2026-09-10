@@ -130,6 +130,7 @@ public sealed class ViewOut
     public int ExtractionX { get; init; }
     public int ExtractionY { get; init; }
     public string Role { get; init; } = "";
+    public string RoleKey { get; init; } = "";
     public string RoleColor { get; init; } = "";
     public string Objective { get; init; } = "";
     public List<HandCardOut> Hand { get; init; } = new();

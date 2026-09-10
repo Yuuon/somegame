@@ -85,6 +85,7 @@ public partial class Game
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,
             Role = RoleDisplay(p),
+            RoleKey = p.Role.ToString().ToLowerInvariant(),
             RoleColor = p.CaseId >= 0 ? PlanColor(p.CaseId) : "",
             Objective = ObjectiveText(p, p.CaseId >= 0 ? PlanColor(p.CaseId) : ""),
             Hand = p.Hand.Select(h =>

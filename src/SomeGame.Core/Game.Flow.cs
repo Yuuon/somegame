@@ -132,10 +132,11 @@ public partial class Game
             case "talk": DoTalk(p, cmd); break;
             case "steal": DoSteal(p); break;
             case "card": DoUseCard(p, cmd, false); break;
-            case "inspect": InspectResult(p); NextAfterFree(p); break;
-            case "finish": p.FinishedFree = true; NextAfterFree(p); break;
-            default: NextAfterFree(p); break;
+            case "inspect": InspectResult(p); break;
+            case "finish": p.FinishedFree = true; break;
+            default: break;
         }
+        NextAfterFree(p); // 行动后统一收尾：AP 归零自动结束本轮，否则保持本窗口
     }
 
     private void NextAfterFree(PlayerActor p)
