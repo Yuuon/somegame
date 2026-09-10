@@ -89,8 +89,65 @@ public class SettlementTests
     }
 }
 
+public class SpawnTests
+{
+    private static Game FourBots(long seed)
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 13;
+        cfg.Map.Height = 13;
+        cfg.Map.DecoyNpcCount = 4;
+        return new Game(cfg, seed, new[]
+        {
+            new SeatIn("A", true), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+    }
+
+    [Fact]
+    public void Bodyguard_StartsWithinOneMove_OfProtectedTarget()
+    {
+        for (long seed = 1; seed <= 20; seed++)
+        {
+            var g = FourBots(seed);
+            foreach (var b in g.Players.Where(p => p.Role == RoleId.Bodyguard))
+            {
+                var npc = g.ProtectedOfCase(b.CaseId);
+                Assert.True(CellPos.Manhattan(b.Pos, npc.Pos) <= 3,
+                    $"seed={seed} 保镖与目标距离={CellPos.Manhattan(b.Pos, npc.Pos)} 超过移动范围");
+            }
+        }
+    }
+
+    [Fact]
+    public void Codes_AreRandomizedFromPool_AndUnique()
+    {
+        var firstCodes = new HashSet<string>();
+        for (long seed = 100; seed <= 108; seed++)
+        {
+            var g = FourBots(seed);
+            var codes = g.Actors.Select(a => a.Code).ToList();
+            Assert.Equal(codes.Count, codes.Distinct().Count()); // 代号唯一
+            Assert.DoesNotContain(codes, c => c.StartsWith("路人"));
+            firstCodes.Add(g.Players[0].Code);
+        }
+        Assert.True(firstCodes.Count > 1, "代号序列应为随机，而非固定顺序");
+    }
+}
+
 public class FlowTests
 {
+    private static CellPos SafeDest(Game g, CellPos from)
+    {
+        var cands = new[]
+        {
+            new CellPos(from.X, from.Y + 2),
+            new CellPos(from.X + 1, from.Y),
+            new CellPos(from.X - 1, from.Y),
+            new CellPos(from.X, Math.Max(0, from.Y - 2)),
+        };
+        return cands.First(c => g.InMap(c));
+    }
+
     [Fact]
     public void HumanFreeMove_Works()
     {
@@ -108,9 +165,7 @@ public class FlowTests
         Assert.Equal(AwaitKind.FreeAction, g.Await!.Kind);
         Assert.Equal(0, g.Await.SeatIndex);
         var p = g.Player(0);
-        var from = p.Pos;
-        var dest = new CellPos(from.X, from.Y + 2);
-        if (!g.InMap(dest)) dest = new CellPos(from.X + 1, from.Y);
+        var dest = SafeDest(g, p.Pos);
         g.SubmitFree(0, new FreeCmd("move", X: dest.X, Y: dest.Y));
         Assert.Equal(dest, p.Pos);
     }
@@ -131,7 +186,7 @@ public class FlowTests
         Assert.Equal(AwaitKind.FreeAction, g.Await!.Kind);
         var p = g.Player(0);
         p.Ap = 1; // 仅剩 1 行动点
-        var dest = new CellPos(p.Pos.X + 1, p.Pos.Y);
+        var dest = SafeDest(g, p.Pos);
         g.SubmitFree(0, new FreeCmd("move", X: dest.X, Y: dest.Y));
         Assert.True(p.FinishedFree, "AP 归零后应自动结束本轮，而非卡在行动窗口");
         Assert.Equal(dest, p.Pos);

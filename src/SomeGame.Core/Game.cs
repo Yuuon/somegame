@@ -68,7 +68,8 @@ public partial class Game
 
         RoleNamesAtStart = roleTokens.Select(t => t.Role.ToString()).ToArray();
 
-        var codes = SeatCodes(seats.Length + cfg.Map.DecoyNpcCount).ToArray();
+        var codes = BuildCodes(seats.Length + cfg.Map.DecoyNpcCount);
+        int codeIdx = 0;
         for (int i = 0; i < seats.Length; i++)
         {
             var (role, caseIdx) = assignments[i];
@@ -77,7 +78,7 @@ public partial class Game
             {
                 Id = _nextActorId++,
                 Kind = ActorKind.Player,
-                Code = codes[i],
+                Code = codes[codeIdx++],
                 Pos = new CellPos(0, 1 + i),
                 Hp = def.Hp,
                 SeatIndex = i,
@@ -102,10 +103,12 @@ public partial class Game
         }
         for (int d = 0; d < cfg.Map.DecoyNpcCount; d++)
         {
-            var npc = SpawnDecoy();
+            var npc = SpawnDecoy(codes[codeIdx++]);
             Decoys.Add(npc);
             Actors.Add(npc);
         }
+
+        RepositionBodyguardsNearTarget();
 
         DealHands();
         PlaceDeckRemainderToChests();
@@ -171,11 +174,39 @@ public partial class Game
         }
     }
 
-    private static IEnumerable<string> SeatCodes(int n)
+    private List<string> BuildCodes(int n)
     {
-        var pre = new[] { "阿澈", "河洛", "青梧", "南烛", "九黎", "扶苏", "凌波", "闻人" };
+        var pool = NamePool.ToArray();
+        for (int i = pool.Length - 1; i > 0; i--)
+        {
+            int j = Rng.Next(0, i + 1);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+        var result = new List<string>(n);
         for (int i = 0; i < n; i++)
-            yield return i < pre.Length ? pre[i] : $"行者{i + 1:D2}";
+            result.Add(i < pool.Length ? pool[i] : $"行者{i + 1:D2}");
+        return result;
+    }
+
+    private void RepositionBodyguardsNearTarget()
+    {
+        foreach (var b in Players.Where(p => p.Role == RoleId.Bodyguard && p.CaseId >= 0 && !p.Dead))
+        {
+            var npc = ProtectedOfCase(b.CaseId);
+            var candidates = new List<CellPos>();
+            for (int x = npc.Pos.X - 3; x <= npc.Pos.X + 3; x++)
+            for (int y = npc.Pos.Y - 3; y <= npc.Pos.Y + 3; y++)
+            {
+                var c = new CellPos(x, y);
+                if (!InMap(c) || c == Extraction) continue;
+                var d = CellPos.Manhattan(npc.Pos, c);
+                if (d < 1 || d > 3) continue;
+                if (Actors.Any(a => !a.Dead && a.Pos == c)) continue;
+                candidates.Add(c);
+            }
+            if (candidates.Count > 0)
+                b.Pos = candidates[Rng.Next(0, candidates.Count)];
+        }
     }
 
     private CellPos RandFreeCell()
@@ -225,6 +256,19 @@ public partial class Game
         path.Reverse();
         return path;
     }
+
+    private static readonly string[] NamePool =
+    {
+        "阿澈", "河洛", "青梧", "南烛", "九黎", "扶苏", "凌波", "闻人",
+        "陆沉", "温言", "许游", "顾影", "江离", "云起", "苏辞", "白榆",
+        "萧然", "沈砚", "楚云", "程门", "林深", "时雨", "谢桥", "沈星",
+        "苏星", "洛昭", "风雅", "千帆", "归鹤", "听澜", "望舒", "栖迟",
+        "未央", "惊鸿", "云岫", "月白", "鹿鸣", "星野", "山止", "川行",
+        "兰舟", "青简", "松间", "竹喧", "莲舟", "雪见", "霜降", "霁月",
+        "清欢", "微凉", "半盏", "长风", "寄安", "策马", "观棋", "拾穗",
+        "闻笛", "泛舟", "折桂", "抱朴", "守拙", "若谷", "怀瑾", "握瑜",
+        "知微", "见著", "沉璧", "渡影",
+    };
 
     // ---------- 日志事件 ----------
     public void Log(ActionEvt e)

@@ -89,13 +89,13 @@ public partial class Game
         };
     }
 
-    private NpcActor SpawnDecoy()
+    private NpcActor SpawnDecoy(string code)
     {
         return new NpcActor
         {
             Id = _nextActorId++,
             Kind = ActorKind.DecoyNpc,
-            Code = $"路人{Decoys.Count + 1}",
+            Code = code,
             Pos = RandFreeCellNoItem(),
             Hp = 1,
             LastOpText = "在闲逛",
