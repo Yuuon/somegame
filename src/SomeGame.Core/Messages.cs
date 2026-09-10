@@ -125,6 +125,7 @@ public sealed class ViewOut
     public bool Awaiting { get; init; }
     public string AwaitKind { get; init; } = "";
     public string AwaitPrompt { get; init; } = "";
+    public long DeadlineEpochMs { get; set; }
     public int X { get; init; }
     public int Y { get; init; }
     public int ExtractionX { get; init; }

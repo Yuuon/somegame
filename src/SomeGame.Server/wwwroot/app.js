@@ -441,6 +441,19 @@
     document.getElementById('btn-again').onclick = () => location.reload();
   }
 
+  // ---------------- 决策倒计时 ----------------
+  function updateCountdown() {
+    const el = $('s-turn-time');
+    const v = state.view;
+    if (!el || !v || !v.deadlineEpochMs || !v.yourTurn) {
+      if (el) { el.textContent = v && v.yourTurn ? '…' : '—'; el.classList.remove('urgent'); }
+      return;
+    }
+    const rem = Math.max(0, Math.round((v.deadlineEpochMs - Date.now()) / 1000));
+    el.textContent = rem + 's';
+    el.classList.toggle('urgent', rem <= 10);
+  }
+
   $('btn-create').onclick = () => send({
     t: 'create',
     playerName: $('create-name').value || '房主',
@@ -454,4 +467,5 @@
   $('btn-start').onclick = () => send({ t: 'start' });
 
   connect();
+  setInterval(updateCountdown, 250);
 })();

@@ -315,7 +315,11 @@ internal sealed class Hub
             var msgs = g.DrainOutbox(i);
             foreach (var m in msgs)
             {
-                if (m is ViewOut v) room.LastView[i] = v;
+                if (m is ViewOut v)
+                {
+                    v.DeadlineEpochMs = new DateTimeOffset(room.Deadline).ToUnixTimeMilliseconds();
+                    room.LastView[i] = v;
+                }
                 _ = Send(c, m);
             }
         }

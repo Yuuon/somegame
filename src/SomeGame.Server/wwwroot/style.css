@@ -67,3 +67,5 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 .seat-row { padding:4px 0; }
 .seat-row.host::after { content:"（房主）"; color:var(--accent); font-size:12px; }
 .hint { color: var(--dim); }
+.turn-time { color: var(--ok); font-variant-numeric: tabular-nums; }
+.turn-time.urgent { color: var(--bad); font-weight: 700; }
