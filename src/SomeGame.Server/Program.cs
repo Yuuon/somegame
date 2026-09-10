@@ -9,7 +9,11 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 var app = builder.Build();
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+        ctx.Context.Response.Headers.CacheControl = "no-cache", // 开发期避免浏览器缓存旧前端
+});
 
 var jsonOpt = new JsonSerializerOptions
 {

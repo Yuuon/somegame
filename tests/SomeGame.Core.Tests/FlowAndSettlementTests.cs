@@ -586,6 +586,21 @@ public class FlowTests
         Assert.Contains(g.Metrics.ActionCounts, kv => kv.Key == "move");
     }
 
+    [Fact]
+    public void MedkitCard_CanHealOtherActor_InSameCell()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        p.Hand.Add(new CardInstance { Id = 888001, DefId = "medkit" });
+        var vip = g.ProtectedNpcs[0];
+        vip.Pos = p.Pos;
+        vip.Hp = 1;
+        g.SubmitFree(0, new FreeCmd("card", CardId: 888001, ActorId: vip.Id));
+        Assert.Equal(2, vip.Hp); // 医疗包可治疗同格其他角色
+        Assert.False(p.Hand.Any(h => h.Id == 888001)); // 卡被消耗
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

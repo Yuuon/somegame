@@ -278,7 +278,7 @@
         render();
         return;
       }
-      if (p.kind === 'checkCard' && (p.defId === 'heal' || p.defId === 'medkit')) {
+      if (p.kind === 'checkCard' && (p.defId === 'heal' || p.defId === 'medkit' || p.defId === 'medkit_temp')) {
         send({ t: 'cmd', op: 'card', cardId: p.cardId, target: code });
         state.pending = null;
         return;
@@ -325,7 +325,7 @@
 
     const canAct = v.yourTurn;
     const pendingCover = state.pending && state.pending.kind === 'cover';
-    const pendingActor = state.pending && (['heal', 'medkit', 'mimic', 'dye'].includes(state.pending.defId));
+    const pendingActor = state.pending && (['heal', 'medkit', 'medkit_temp', 'mimic', 'dye'].includes(state.pending.defId));
     const pendingItem = state.pending && state.pending.defId === 'glue';
     const showTalk = canAct && v.awaitKind === 'FreeAction';
     const showCheck = canAct && v.awaitKind === 'CheckAction';
@@ -335,7 +335,7 @@
       const row = document.createElement('div');
       row.className = 'cell-occupants';
       // 治疗包/医疗包可对自己使用
-      if (state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'medkit') && canAct) {
+      if (state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'medkit' || state.pending.defId === 'medkit_temp') && canAct) {
         const selfChip = document.createElement('button');
         selfChip.className = 'chip clickable';
         selfChip.textContent = v.myCode + '（自己）';
@@ -424,7 +424,7 @@
   }
 
   function targetOf(defId) {
-    if (['heal', 'medkit', 'mimic', 'dye'].includes(defId)) return 'actor';
+    if (['heal', 'medkit', 'medkit_temp', 'mimic', 'dye'].includes(defId)) return 'actor';
     if (defId === 'glue') return 'item';
     if (['drone', 'molotov', 'track'].includes(defId)) return 'cell';
     return 'self';
@@ -445,7 +445,7 @@
     }
     const kind = v.awaitKind === 'CheckAction' ? 'checkCard' : 'freeCard';
     const tgt = targetOf(defId);
-    const isHeal = defId === 'heal' || defId === 'medkit';
+    const isHeal = defId === 'heal' || defId === 'medkit' || defId === 'medkit_temp';
     if (tgt === 'self') {
       send({ t: 'cmd', op: 'card', cardId: card.id });
     } else if (isHeal) {
