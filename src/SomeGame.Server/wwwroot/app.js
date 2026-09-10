@@ -14,6 +14,7 @@
     myRole: '',
     myRoleKey: '',
     myColor: '',
+    myCode: '',
     host: false,
     pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
     busy: false,
@@ -61,6 +62,7 @@
         state.myRole = msg.role;
         state.myRoleKey = msg.roleKey;
         state.myColor = msg.roleColor;
+        state.myCode = msg.myCode;
         if (msg.objective) state.objective = msg.objective;
         state.inGame = true;
         show('game');
@@ -118,6 +120,7 @@
     $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
     $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
     renderBoard(v);
+    renderCellPanel(v);
     renderHand(v);
     renderActions(v);
     renderBattle(v);
@@ -150,10 +153,13 @@
         div.appendChild(t);
       }
       if (c.occupants.length) {
-        const t = document.createElement('span');
-        t.className = 'who';
-        t.textContent = c.occupants.join(' ');
-        div.appendChild(t);
+        c.occupants.forEach(code => {
+          const t = document.createElement('span');
+          t.className = 'who clickable-occ';
+          t.textContent = code;
+          t.onclick = (e) => { e.stopPropagation(); occupantClick(code); };
+          div.appendChild(t);
+        });
       }
       (c.items || []).forEach(it => {
         const s = document.createElement('span');
@@ -204,6 +210,7 @@
   function occupantClick(code) {
     const v = state.view;
     if (!v) return;
+    if (code === v.myCode) { appendLog({ text: '不能对自己执行此操作。', kind: 'info', tier: 0 }); return; }
     if (state.pending) {
       const p = state.pending;
       if (p.kind === 'checkCard' && p.defId === 'heal') {
@@ -236,6 +243,81 @@
     }
     if (v.awaitKind === 'FreeAction' && v.yourTurn) {
       send({ t: 'cmd', op: action, itemId: item.id });
+    }
+  }
+
+  function renderCellPanel(v) {
+    const panel = $('cell-panel');
+    panel.innerHTML = '';
+    const me = (v.cells || []).find(c => c.x === v.x && c.y === v.y);
+    const title = document.createElement('div');
+    title.className = 'hint';
+    title.textContent = `你位于 [${v.x},${v.y}]`;
+    panel.appendChild(title);
+    if (!me) return;
+
+    const canAct = v.yourTurn;
+    const pendingActor = state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'mimic' || state.pending.defId === 'dye');
+    const pendingItem = state.pending && state.pending.defId === 'glue';
+    const showTalk = canAct && v.awaitKind === 'FreeAction';
+    const showCheck = canAct && v.awaitKind === 'CheckAction';
+
+    // 角色：点击交谈 / 查验 / 作为卡牌目标（自身除外）
+    if (me.occupants.length) {
+      const row = document.createElement('div');
+      row.className = 'cell-occupants';
+      me.occupants.forEach(code => {
+        const chip = document.createElement('button');
+        const isSelf = code === v.myCode;
+        const clickable = !isSelf && canAct && (showTalk || showCheck || pendingActor);
+        chip.className = 'chip' + (clickable ? ' clickable' : '');
+        chip.textContent = code + (isSelf ? '（你）' : '');
+        if (clickable) chip.onclick = () => occupantClick(code);
+        row.appendChild(chip);
+      });
+      panel.appendChild(row);
+    } else {
+      const none = document.createElement('div');
+      none.className = 'hint';
+      none.textContent = '此处没有其他角色';
+      panel.appendChild(none);
+    }
+
+    // 可交互物品：开箱 / 医疗包 / 万能胶目标
+    if (me.interactables && me.interactables.length) {
+      const row = document.createElement('div');
+      row.className = 'cell-items';
+      me.interactables.forEach(it => {
+        const b = document.createElement('button');
+        let label = it.label;
+        let clickable = false;
+        let action = null;
+        if (pendingItem && canAct) { label = `对「${it.label}」布置陷阱`; clickable = true; action = () => itemClick(it, 'glue'); }
+        else if (it.kind === 'Chest' && canAct) { label = it.label + (it.hasCard ? '（取卡）' : '（空）'); clickable = true; action = () => itemClick(it, 'open'); }
+        else if (it.kind === 'Medkit' && canAct) { label = '医疗包（+1HP）'; clickable = true; action = () => itemClick(it, 'medkit'); }
+        b.className = 'cellitem' + (clickable ? ' clickable' : '');
+        b.textContent = label;
+        if (action) b.onclick = action;
+        row.appendChild(b);
+      });
+      panel.appendChild(row);
+    }
+
+    if (pendingActor) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '请点击同格角色作为目标';
+      panel.appendChild(hint);
+    } else if (showTalk) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '点击角色可交谈';
+      panel.appendChild(hint);
+    } else if (showCheck) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '点击角色查验身份';
+      panel.appendChild(hint);
     }
   }
 
@@ -306,25 +388,12 @@
     if (v.awaitKind === 'FreeAction') {
       btn('移动（1-3格）', '', () => appendLog({ text: '请点击目标格子（直线距离 1-3 格）。', kind: 'info', tier: 0 }));
       btn('探查', '', () => send({ t: 'cmd', op: 'inspect' }));
-      btn('交谈', '', () => appendLog({ text: '请点击同格角色。', kind: 'info', tier: 0 }));
-      const me = v.cells.find(c => c.x === v.x && c.y === v.y);
-      if (me) {
-        me.interactables.forEach(it => {
-          if (it.kind === 'Chest') btn(it.label + (it.hasCard ? '（可取卡）' : ''), '', () => itemClick(it, 'open'));
-          if (it.kind === 'Medkit') btn('使用医疗包(+1HP)', '', () => itemClick(it, 'medkit'));
-        });
-      }
+      btn('交谈/物品', '', () => appendLog({ text: '请在下方「所在格」面板点击角色或物品。', kind: 'info', tier: 0 }));
       if (state.myRoleKey === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
       btn('结束本轮行动', 'primary', () => send({ t: 'cmd', op: 'finish' }));
-      if (state.pending && state.pending.kind === 'freeCard') {
-        const cancel = document.createElement('button');
-        cancel.textContent = '取消选择';
-        cancel.onclick = () => { state.pending = null; render(); };
-        box.appendChild(cancel);
-      }
     } else if (v.awaitKind === 'CheckAction') {
       btn('跳过', '', () => send({ t: 'cmd', op: 'skip' }));
-      btn('查验（点击可见角色或输入代号）', '', () => appendLog({ text: '请点击一个角色代号以查验。', kind: 'info', tier: 0 }));
+      btn('查验（点击「所在格」角色或输入远处代号）', '', () => appendLog({ text: '请点击一个角色代号以查验。', kind: 'info', tier: 0 }));
       const input = document.createElement('input');
       input.placeholder = '远处目标代号';
       const go = document.createElement('button');
@@ -341,6 +410,13 @@
       btn('承受这次攻击', '', () => send({ t: 'cmd', dodge: false }));
       const dodge = (v.hand || []).find(c => c.defId === 'dodge');
       if (dodge) btn('使用闪避', 'primary', () => send({ t: 'cmd', dodge: true, cardId: dodge.id }));
+    }
+
+    if (state.pending) {
+      const cancel = document.createElement('button');
+      cancel.textContent = '取消选择';
+      cancel.onclick = () => { state.pending = null; render(); };
+      box.appendChild(cancel);
     }
   }
 

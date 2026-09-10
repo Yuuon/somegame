@@ -143,9 +143,10 @@ public partial class Game
     private void DoTalk(PlayerActor p, FreeCmd cmd)
     {
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
-        if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。")); return; }
+if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。")); return; }
         var target = ActorById(cmd.ActorId.Value);
-        if (target.Dead || target.Id == p.Id || target.Pos != p.Pos)
+        if (target.Id == p.Id) { PushOut(p.SeatIndex, Msg("不能与自己交谈。")); return; }
+        if (target.Dead || target.Pos != p.Pos)
         { PushOut(p.SeatIndex, Msg("交谈对象须与你同格。")); return; }
         p.Ap--;
         Log(MakeEvt(p, "talk", $"和「{target.Code}」交谈了一会儿", "在和谁说话", "有人在说话", target.Code, false, p.Pos));

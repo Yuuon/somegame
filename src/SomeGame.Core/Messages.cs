@@ -129,6 +129,7 @@ public sealed class ViewOut
     public int Y { get; init; }
     public int ExtractionX { get; init; }
     public int ExtractionY { get; init; }
+    public string MyCode { get; init; } = "";
     public string Role { get; init; } = "";
     public string RoleKey { get; init; } = "";
     public string RoleColor { get; init; } = "";

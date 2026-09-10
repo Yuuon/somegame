@@ -82,6 +82,7 @@ public partial class Game
             AwaitPrompt = awaiting ? Await!.Prompt : "",
             X = center.X,
             Y = center.Y,
+            MyCode = p.Code,
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,
             Role = RoleDisplay(p),
