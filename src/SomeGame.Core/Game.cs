@@ -328,6 +328,7 @@ public partial class Game
     {
         e.Seq = (long)Archive.Count + 1;
         Archive.Add(e);
+        if (Archive.Count > 20000) Archive.RemoveAt(0); // 上限裁剪，避免长局回放日志无限增长
         var vm = new ViewMessage(e);
         foreach (var p in Players)
         {

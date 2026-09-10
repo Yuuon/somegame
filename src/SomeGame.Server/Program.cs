@@ -48,10 +48,26 @@ internal sealed class Hub
         using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
         var client = new Client(ws);
         lock (_lock) _clients.Add(client);
+
+        // 发送泵：串行发送；慢速客户端仍保持连接（队列有界丢旧保新），真正死连接由接收侧/异常清理
+        _ = Task.Run(async () =>
+        {
+            while (ws.State == WebSocketState.Open && !client.Dead)
+            {
+                var data = client.Dequeue();
+                if (data == null) { await Task.Delay(20); continue; }
+                try
+                {
+                    await ws.SendAsync(data, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                catch { client.Dead = true; break; }
+            }
+        });
+
         var buf = new byte[64 * 1024];
         try
         {
-            while (ws.State == WebSocketState.Open)
+            while (ws.State == WebSocketState.Open && !client.Dead)
             {
                 using var ms = new MemoryStream();
                 WebSocketReceiveResult res;
@@ -69,6 +85,7 @@ internal sealed class Hub
         catch (WebSocketException) { }
         finally
         {
+            client.Dead = true;
             lock (_lock)
             {
                 _clients.Remove(client);
@@ -104,6 +121,8 @@ internal sealed class Hub
                         HandleCmd(client, root);
                         break;
                 }
+                if (client.RoomId != null && _rooms.TryGetValue(client.RoomId, out var ar))
+                    ar.LastActivity = DateTime.UtcNow;
             }
         }
         catch (Exception)
@@ -125,7 +144,7 @@ internal sealed class Hub
         client.Seat = 0;
         room.HostConn = client;
         room.Slots[0] = new Slot(name, client, false);
-        _ = Send(client, new LobbyOut
+        Send(client, new LobbyOut
         {
             RoomId = roomId,
             Players = players,
@@ -137,11 +156,11 @@ internal sealed class Hub
     private void JoinRoom(Client client, JsonElement root)
     {
         var roomId = Str(root, "roomId");
-        if (roomId == null || !_rooms.TryGetValue(roomId, out var room)) { _ = Send(client, new InfoOut("房间不存在")); return; }
-        if (room.Game != null) { _ = Send(client, new InfoOut("对局已开始")); return; }
+        if (roomId == null || !_rooms.TryGetValue(roomId, out var room)) { Send(client, new InfoOut("房间不存在")); return; }
+        if (room.Game != null) { Send(client, new InfoOut("对局已开始")); return; }
         var name = Str(root, "playerName") ?? "玩家";
         var idx = Array.FindIndex(room.Slots, s => s == null || (s.Bot && s.Conn == null));
-        if (idx < 0) { _ = Send(client, new InfoOut("房间已满")); return; }
+        if (idx < 0) { Send(client, new InfoOut("房间已满")); return; }
         client.Name = name;
         client.RoomId = roomId;
         client.Seat = idx;
@@ -256,15 +275,15 @@ internal sealed class Hub
         while (true)
         {
             await Task.Delay(150);
-            Room[] rooms;
-            lock (_lock) rooms = _rooms.Values.ToArray();
-            foreach (var room in rooms)
+            lock (_lock)
             {
-                // 与客户端命令、断线处理共用同一把锁，避免对同一对局并发写入
-                lock (_lock)
+                CleanupRooms();
+                var rooms = _rooms.Values.ToArray();
+                foreach (var room in rooms)
                 {
                     var g = room.Game;
                     if (g == null || g.Terminal) continue;
+                    room.LastActivity = DateTime.UtcNow;
                     if (g.Await == null)
                     {
                         g.Continue();
@@ -287,6 +306,20 @@ internal sealed class Hub
                     }
                 }
             }
+        }
+    }
+
+    // 防止房间与对局对象无限累积：终局房间 5 分钟后移除；无人空闲房间 2 分钟后移除
+    private void CleanupRooms()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var id in _rooms.Keys.ToList())
+        {
+            if (!_rooms.TryGetValue(id, out var r)) continue;
+            if (r.Game != null && r.Game.Terminal && now - r.LastActivity > TimeSpan.FromMinutes(5))
+                _rooms.Remove(id);
+            else if (r.Game == null && r.Slots.All(s => s?.Conn == null) && now - r.LastActivity > TimeSpan.FromMinutes(2))
+                _rooms.Remove(id);
         }
     }
 
@@ -320,9 +353,9 @@ internal sealed class Hub
         if (g == null) return;
         for (int i = 0; i < room.Slots.Length; i++)
         {
+            var msgs = g.DrainOutbox(i); // 无论是否在线都清空，防止断线座位 outbox 无限堆积
             var slot = room.Slots[i];
             if (slot?.Conn is not { } c) continue;
-            var msgs = g.DrainOutbox(i);
             foreach (var m in msgs)
             {
                 if (m is ViewOut v)
@@ -330,7 +363,7 @@ internal sealed class Hub
                     v.DeadlineEpochMs = new DateTimeOffset(room.Deadline).ToUnixTimeMilliseconds();
                     room.LastView[i] = v;
                 }
-                _ = Send(c, m);
+                Send(c, m);
             }
         }
     }
@@ -340,7 +373,7 @@ internal sealed class Hub
         foreach (var s in room.Slots)
         {
             if (s?.Conn is not { } c) continue;
-            _ = Send(c, new LobbyOut
+            Send(c, new LobbyOut
             {
                 RoomId = room.Id,
                 Players = room.Players,
@@ -376,16 +409,15 @@ internal sealed class Hub
         client.Seat = null;
     }
 
-    private async Task Send(Client c, object msg)
+    private void Send(Client c, object msg)
     {
+        if (c.Dead) return;
         try
         {
-            if (c.Ws.State != WebSocketState.Open) return;
             var json = JsonSerializer.Serialize(msg, _opt);
-            var bytes = Encoding.UTF8.GetBytes(json);
-            await c.Ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+            c.Enqueue(Encoding.UTF8.GetBytes(json));
         }
-        catch (WebSocketException) { }
+        catch { }
     }
 
     private static string? Str(JsonElement e, string n) =>
@@ -405,6 +437,22 @@ internal sealed class Client
     public string Name { get; set; } = "";
     public string? RoomId { get; set; }
     public int? Seat { get; set; }
+    public bool Dead { get; set; }
+
+    private readonly object _lock = new();
+    private readonly Queue<byte[]> _queue = new();
+    public void Enqueue(byte[] data)
+    {
+        lock (_lock)
+        {
+            if (_queue.Count >= 500) _queue.Clear(); // 压力下丢旧保新，内存有界且不断开
+            _queue.Enqueue(data);
+        }
+    }
+    public byte[]? Dequeue()
+    {
+        lock (_lock) { return _queue.Count > 0 ? _queue.Dequeue() : null; }
+    }
 }
 
 internal sealed class Slot
@@ -425,6 +473,7 @@ internal sealed class Room
         Id = id; Players = players; HostName = hostName;
         Slots = new Slot?[players];
         Deadline = DateTime.UtcNow;
+        LastActivity = DateTime.UtcNow;
         LastView = new ViewOut[players];
     }
     public string Id { get; }
@@ -434,6 +483,7 @@ internal sealed class Room
     public Slot?[] Slots { get; }
     public Game? Game { get; set; }
     public DateTime Deadline { get; set; }
+    public DateTime LastActivity { get; set; }
     public int DecisionMs { get; set; } = 60000;
     public ViewOut[] LastView { get; }
     public void ResetDeadline() => Deadline = DateTime.UtcNow.AddMilliseconds(DecisionMs);
