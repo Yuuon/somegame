@@ -266,6 +266,18 @@
     if (me.occupants.length) {
       const row = document.createElement('div');
       row.className = 'cell-occupants';
+      // 治疗包可对自己使用
+      if (state.pending && state.pending.defId === 'heal' && canAct) {
+        const selfChip = document.createElement('button');
+        selfChip.className = 'chip clickable';
+        selfChip.textContent = v.myCode + '（自己）';
+        selfChip.onclick = () => {
+          send({ t: 'cmd', op: 'card', cardId: state.pending.cardId, target: v.myCode });
+          state.pending = null;
+          render();
+        };
+        row.appendChild(selfChip);
+      }
       me.occupants.forEach(code => {
         const chip = document.createElement('button');
         const isSelf = code === v.myCode;
@@ -360,11 +372,24 @@
     const tgt = targetOf(defId);
     if (tgt === 'self') {
       send({ t: 'cmd', op: 'card', cardId: card.id });
+    } else if (defId === 'heal') {
+      // 治疗包：无其他同格角色时直接治疗自己，否则让玩家选择目标（含自己）
+      const me = (v.cells || []).find(c => c.x === v.x && c.y === v.y);
+      const others = (me?.occupants || []).filter(c => c !== v.myCode);
+      if (!others.length) {
+        send({ t: 'cmd', op: 'card', cardId: card.id });
+        state.pending = null;
+        render();
+        return;
+      }
+      state.pending = { kind, cardId: card.id, defId };
+      appendLog({ text: '请选择治疗目标：点击同格角色或「自己」。', kind: 'info', tier: 0 });
+      render();
     } else {
       state.pending = { kind, cardId: card.id, defId };
       appendLog({ text: `请选择目标${tgt === 'cell' ? '（点击地图格子）' : tgt === 'item' ? '（点击本格物品）' : '（点击同格角色）'}`, kind: 'info', tier: 0 });
+      render();
     }
-    render();
   }
 
   function renderActions(v) {

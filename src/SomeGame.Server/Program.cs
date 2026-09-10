@@ -231,7 +231,17 @@ internal sealed class Hub
     {
         var op = Str(root, "op") ?? "";
         if (op == "skip") return new CheckCmd(Skip: true);
-        if (op == "card") return new CheckCmd(Skip: false, CardId: Long(root, "cardId"), X: Int(root, "x") ?? 0, Y: Int(root, "y") ?? 0);
+        if (op == "card")
+        {
+            int? tid = null;
+            var tc = Str(root, "target");
+            if (tc != null)
+            {
+                var a = g.Actors.FirstOrDefault(x => !x.Dead && x.Code == tc);
+                if (a != null) tid = a.Id;
+            }
+            return new CheckCmd(Skip: false, TargetActorId: tid, CardId: Long(root, "cardId"), X: Int(root, "x") ?? 0, Y: Int(root, "y") ?? 0);
+        }
         var targetCode = Str(root, "target");
         if (targetCode != null)
         {

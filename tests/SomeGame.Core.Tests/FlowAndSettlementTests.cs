@@ -153,6 +153,22 @@ public class FlowTests
         Assert.Contains(g.Player(0).Role.ToString().ToLowerInvariant(), v.RoleKey);
     }
 
+    [Fact]
+    public void HealCard_CanHealSelf_WithoutTarget()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        Assert.Equal(AwaitKind.FreeAction, g.Await!.Kind);
+        var p = g.Player(0);
+        p.Hand.Add(new CardInstance { Id = 9999001, DefId = "heal" });
+        var maxHp = GameConfig.Default().Role(p.Role.ToString().ToLowerInvariant()).Hp;
+        p.Hp = Math.Max(1, maxHp - 1);
+        var before = p.Hp;
+        g.SubmitFree(0, new FreeCmd("card", CardId: 9999001));
+        Assert.True(p.Hp > before, "治疗包应能治疗自己");
+        Assert.False(p.Hand.Any(h => h.Id == 9999001), "治疗包应被消耗");
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();
