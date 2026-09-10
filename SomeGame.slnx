@@ -6,4 +6,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/SomeGame.Core.Tests/SomeGame.Core.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/SomeGame.Balance/SomeGame.Balance.csproj" />
+  </Folder>
 </Solution>
