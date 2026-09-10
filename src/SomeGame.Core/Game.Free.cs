@@ -62,24 +62,26 @@ public partial class Game
         }
     }
 
-    // ---------- 移动 ----------
+    // ---------- 移动 / 疾走 ----------
     private void DoMove(PlayerActor p, FreeCmd cmd)
     {
         if (p.MovedThisRound) { PushOut(p.SeatIndex, Msg("本回合已经移动过。")); return; }
-        if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
+        int cost = cmd.Dash ? 2 : 1; // 疾走额外消耗 1 AP
+        int maxD = cmd.Dash ? 5 : 3; // 疾走移动距离 +2
+        if (p.Ap < cost) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
         var dest = new CellPos(cmd.X, cmd.Y);
         if (!InMap(dest)) { PushOut(p.SeatIndex, Msg("目标位置不在地图上。")); return; }
         var d = CellPos.Manhattan(p.Pos, dest);
-        if (d < 1 || d > 3) { PushOut(p.SeatIndex, Msg("移动距离须为 1-3 格。")); return; }
+        if (d < 1 || d > maxD) { PushOut(p.SeatIndex, Msg(cmd.Dash ? "疾走移动距离须为 1-5 格。" : "移动距离须为 1-3 格。")); return; }
 
         var hidden = TryStealthFor(p, out _);
         var start = p.Pos;
         p.MovedThisRound = true;
-        p.Ap--;
+        p.Ap -= cost;
         p.Pos = dest;
         var dir = Dir(start, dest);
-        Log(MakeEvt(p, "move", $"{dir}移动", "移动了", "有人移动了", null, hidden, start));
-        LogActorText(p, $"你{dir}移动至 {dest}。");
+        Log(MakeEvt(p, "move", cmd.Dash ? $"疾驰{dir}移动" : $"{dir}移动", cmd.Dash ? "疾驰而过" : "移动了", "有人移动了", null, hidden, start));
+        LogActorText(p, $"你{(cmd.Dash ? "疾驰" : "")}{dir}移动至 {dest}。");
         DyeTrackMove(p);
         CheckArriveExtraction(p);
     }

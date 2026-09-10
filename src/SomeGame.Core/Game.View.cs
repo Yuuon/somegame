@@ -89,7 +89,9 @@ public partial class Game
         bool extractionVisible = Round >= 10 ||
             (Round >= 5 && (p.Role == RoleId.Bodyguard || ProtectedNpcs.Any(n => n.Exposed)));
         string extractionHint = extractionVisible
-            ? $"撤离点位于{CoarseRegion(Extraction)}（距你 {CellPos.Manhattan(p.Pos, Extraction)} 格）"
+            ? (p.Role == RoleId.Bodyguard
+                ? $"撤离点位于[{Extraction.X},{Extraction.Y}]（距你 {CellPos.Manhattan(p.Pos, Extraction)} 格）"
+                : $"撤离点位于{CoarseRegion(Extraction)}（距你 {CellPos.Manhattan(p.Pos, Extraction)} 格）")
             : "撤离点位置未知";
 
         return new ViewOut
@@ -105,6 +107,8 @@ public partial class Game
             AwaitPrompt = awaiting ? Await!.Prompt : "",
             X = center.X,
             Y = center.Y,
+            MapW = Width,
+            MapH = Height,
             MyCode = p.Code,
             ExtractionX = Extraction.X,
             ExtractionY = Extraction.Y,

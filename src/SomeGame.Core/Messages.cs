@@ -128,6 +128,8 @@ public sealed class ViewOut
     public long DeadlineEpochMs { get; set; }
     public int X { get; init; }
     public int Y { get; init; }
+    public int MapW { get; init; }
+    public int MapH { get; init; }
     public int ExtractionX { get; init; }
     public int ExtractionY { get; init; }
     public bool ExtractionVisible { get; init; }

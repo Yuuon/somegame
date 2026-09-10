@@ -41,6 +41,19 @@ public partial class Game
         var cdef = Cfg.Card(def.SupplyCard);
         p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = cdef.Id, Temp = true });
         PushOut(p.SeatIndex, new LogOut(-1, $"你获得了本回合固定补给：{cdef.Name}", 0, null, null, "card", false));
+
+        // 保镖：自己或守护贵宾受伤时，额外生成一张临时医疗包
+        if (p.Role == RoleId.Bodyguard && p.CaseId >= 0)
+        {
+            var maxSelf = def.Hp;
+            var vip = ProtectedNpcs.FirstOrDefault(n => n.CaseId == p.CaseId && !n.Dead);
+            bool injured = p.Hp < maxSelf || (vip != null && vip.Hp < Cfg.ProtectedNpcHp);
+            if (injured)
+            {
+                p.Hand.Add(new CardInstance { Id = ++_cardSeq, DefId = "medkit_temp", Temp = true });
+                PushOut(p.SeatIndex, new LogOut(-1, "你或贵宾受伤，额外获得一张临时医疗包。", 0, null, null, "card", false));
+            }
+        }
     }
 
     private void EndFreeWhenAllDone()
@@ -313,6 +326,6 @@ public partial class Game
 }
 
 public sealed record FreeCmd(string Op, long? CardId = null, int? ActorId = null, long? ItemId = null,
-    int X = 0, int Y = 0);
+    int X = 0, int Y = 0, bool Dash = false);
 public sealed record CheckCmd(bool Skip, int? TargetActorId = null, bool StartBattle = false,
     long? CardId = null, int X = 0, int Y = 0);

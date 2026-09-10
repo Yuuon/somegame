@@ -396,6 +396,76 @@ public class FlowTests
         Assert.Contains(drained, m => m is LogOut lo && lo.Kind == "vague");
     }
 
+    [Fact]
+    public void DashMove_Consumes2Ap_AllowsDistance5()
+    {
+        var g = GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        p.Ap = 3;
+        CellPos dest = default;
+        for (int x = 0; x < 11; x++)
+            for (int y = 0; y < 11; y++)
+                if (CellPos.Manhattan(p.Pos, new CellPos(x, y)) == 5) { dest = new CellPos(x, y); break; }
+        g.SubmitFree(0, new FreeCmd("move", X: dest.X, Y: dest.Y, Dash: true));
+        Assert.Equal(dest, p.Pos);
+        Assert.Equal(1, p.Ap); // 3 - 2 = 1
+        Assert.True(p.MovedThisRound);
+    }
+
+    [Fact]
+    public void Bodyguard_Supply_TempMedkit_ExtraWhenInjured()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 2;
+        var g = new Game(cfg, 7, new[]
+        {
+            new SeatIn("BG", false), new SeatIn("B1", true), new SeatIn("B2", true), new SeatIn("B3", true),
+        }, shuffleRoles: false); // seat0 恒为保镖
+        g.Continue();
+        var p = g.Player(0);
+        Assert.Equal(RoleId.Bodyguard, p.Role);
+        Assert.Contains(p.Hand, h => h.DefId == "medkit_temp"); // 基础补给
+
+        p.Hp = 1; // 自己受伤
+        g.ProtectedOfCase(0).Hp = 1; // 贵宾受伤
+        int guard = 0;
+        while (g.Round < 2 && !g.Terminal && guard++ < 1000)
+        {
+            if (g.Stage == Stage.Free && g.Await?.SeatIndex == 0 && g.Await.Kind == AwaitKind.FreeAction)
+                g.SubmitFree(0, new FreeCmd("finish"));
+            else if (g.Stage == Stage.Check && g.Await?.SeatIndex == 0)
+                g.SubmitCheck(0, new CheckCmd(Skip: true));
+            else g.Continue();
+        }
+        Assert.True(g.Player(0).Hand.Count(h => h.DefId == "medkit_temp") >= 2, "受伤时额外生成一张临时医疗包");
+    }
+
+    [Fact]
+    public void ExtractionHint_ExactForBodyguard_FuzzyForOthers()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 2;
+        var g = new Game(cfg, 8, new[]
+        {
+            new SeatIn("BG", false), new SeatIn("K", true), new SeatIn("B2", true), new SeatIn("B3", true),
+        }, shuffleRoles: false);
+        typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 5 });
+        var exact = $"[{g.Extraction.X},{g.Extraction.Y}]";
+        Assert.True(g.BuildView(g.Player(0)).ExtractionVisible);
+        Assert.Contains(exact, g.BuildView(g.Player(0)).ExtractionHint); // 保镖精确坐标
+
+        var k = g.Player(1); // 杀手（未暴露）
+        Assert.False(g.BuildView(k).ExtractionVisible);
+        g.ProtectedNpcs[0].Exposed = true;
+        Assert.True(g.BuildView(k).ExtractionVisible);
+        Assert.DoesNotContain(exact, g.BuildView(k).ExtractionHint); // 他人保持模糊
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

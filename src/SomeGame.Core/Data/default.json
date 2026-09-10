@@ -22,7 +22,7 @@
     "decisionMs": 60000
   },
   "roles": [
-    { "id": "bodyguard", "displayName": "保镖", "hp": 5, "supplyCard": null },
+    { "id": "bodyguard", "displayName": "保镖", "hp": 5, "supplyCard": "medkit_temp" },
     { "id": "killer", "displayName": "杀手", "hp": 3, "supplyCard": "gun_temp" },
     { "id": "thief", "displayName": "小偷", "hp": 2, "supplyCard": "stealth_temp" },
     { "id": "madman", "displayName": "疯子", "hp": 4, "supplyCard": "knife_temp" }
@@ -75,7 +75,8 @@
     { "id": "glue", "name": "万能胶", "effect": "glue", "category": "utility", "phases": ["free"], "target": "selfcell" },
     { "id": "gun_temp", "name": "临时枪械", "effect": "gun", "category": "attack", "phases": ["battle"], "target": "actor", "range": 2, "temp": true },
     { "id": "knife_temp", "name": "临时刀械", "effect": "knife", "category": "attack", "phases": ["battle"], "target": "actor", "range": 1, "temp": true },
-    { "id": "stealth_temp", "name": "临时隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "temp": true }
+    { "id": "stealth_temp", "name": "临时隐身", "effect": "stealth", "category": "utility", "phases": ["free", "check", "battle"], "target": "self", "temp": true },
+    { "id": "medkit_temp", "name": "临时医疗包", "effect": "heal", "category": "utility", "phases": ["free", "check", "battle"], "target": "actor", "value": 1, "temp": true }
   ],
   "deck": [
     { "cardId": "gun", "count": 16 },

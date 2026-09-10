@@ -136,9 +136,16 @@
     return { Free: '自由行动', Check: '身份查验', Battle: '战斗', Terminal: '已结束', Idle: '—' }[s] || s;
   }
 
+  function isCellTarget(p) {
+    return p && ['drone', 'track', 'molotov'].includes(p.defId);
+  }
+
   function renderBoard(v) {
     const board = $('board');
-    const cells = v.cells || [];
+    const fullMap = state.pending && isCellTarget(state.pending);
+    const cells = fullMap
+      ? Array.from({ length: v.mapW * v.mapH }, (_, i) => ({ x: i % v.mapW, y: Math.floor(i / v.mapW), tier: 2 }))
+      : (v.cells || []);
     const maxX = Math.max(...cells.map(c => c.x), 0);
     const maxY = Math.max(...cells.map(c => c.y), 0);
     board.style.gridTemplateColumns = `repeat(${maxX + 1}, 44px)`;
@@ -150,7 +157,7 @@
       const div = document.createElement('div');
       if (!c) { div.className = 'cell'; board.appendChild(div); continue; }
       div.className = 'cell tier' + c.tier + (x === v.x && y === v.y ? ' me' : '') +
-        (x === v.extractionX && y === v.extractionY ? ' extraction' : '') +
+        (x === v.extractionX && y === v.extractionY && v.extractionVisible ? ' extraction' : '') +
         (c.burning ? ' burning' : '') + (c.smoky ? ' smoky' : '');
       if (x === v.extractionX && y === v.extractionY && v.extractionVisible) {
         const t = document.createElement('span');
@@ -158,21 +165,23 @@
         t.textContent = '★撤离点';
         div.appendChild(t);
       }
-      if (c.occupants.length) {
-        c.occupants.forEach(code => {
-          const t = document.createElement('span');
-          t.className = 'who clickable-occ';
-          t.textContent = code;
-          t.onclick = (e) => { e.stopPropagation(); occupantClick(code); };
-          div.appendChild(t);
+      if (!fullMap) {
+        if (c.occupants.length) {
+          c.occupants.forEach(code => {
+            const t = document.createElement('span');
+            t.className = 'who clickable-occ';
+            t.textContent = code;
+            t.onclick = (e) => { e.stopPropagation(); occupantClick(code); };
+            div.appendChild(t);
+          });
+        }
+        (c.items || []).forEach(it => {
+          const s = document.createElement('span');
+          s.className = 'item';
+          s.textContent = it;
+          div.appendChild(s);
         });
       }
-      (c.items || []).forEach(it => {
-        const s = document.createElement('span');
-        s.className = 'item';
-        s.textContent = it;
-        div.appendChild(s);
-      });
       const clickable = cellClickable(c, v);
       if (clickable) {
         div.classList.add('clickable');
@@ -183,10 +192,14 @@
   }
 
   function cellClickable(c, v) {
-    if (state.pending) return true;
-    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
-      const d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
-      return d >= 1 && d <= 3;
+    if (state.pending) {
+      const p = state.pending;
+      if (p.kind === 'move') {
+        const d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
+        return d >= 1 && d <= (p.dash ? 5 : 3);
+      }
+      if (isCellTarget(p)) return true;
+      return false;
     }
     return false;
   }
@@ -196,6 +209,12 @@
     if (!v) return;
     if (state.pending) {
       const p = state.pending;
+      if (p.kind === 'move') {
+        send({ t: 'cmd', op: 'move', x, y, dash: !!p.dash });
+        state.pending = null;
+        render();
+        return;
+      }
       if (p.kind === 'checkCard') {
         send({ t: 'cmd', op: 'card', cardId: p.cardId, x, y });
         state.pending = null;
@@ -207,9 +226,6 @@
         return;
       }
       return;
-    }
-    if (v.awaitKind === 'FreeAction' && v.yourTurn) {
-      send({ t: 'cmd', op: 'move', x, y });
     }
   }
 
@@ -235,6 +251,7 @@
         state.pending = null;
         return;
       }
+      return; // 其他 pending（移动/全图选择）不触发交谈/查验
     }
     if (v.awaitKind === 'FreeAction' && v.yourTurn) {
       send({ t: 'cmd', op: 'talk', target: code });
@@ -252,6 +269,7 @@
         state.pending = null;
         return;
       }
+      return; // 其他 pending（移动/全图选择）不触发物品操作
     }
     if (v.awaitKind === 'FreeAction' && v.yourTurn) {
       send({ t: 'cmd', op: action, itemId: item.id });
@@ -294,7 +312,8 @@
       me.occupants.forEach(code => {
         const chip = document.createElement('button');
         const isSelf = code === v.myCode;
-        const clickable = !isSelf && canAct && (showTalk || showCheck || pendingActor || pendingCover);
+        const pendingBlocks = state.pending && !(pendingActor || pendingCover); // 移动/全图选择时角色不可点
+        const clickable = !isSelf && canAct && !pendingBlocks && (showTalk || showCheck || pendingActor || pendingCover);
         chip.className = 'chip' + (clickable ? ' clickable' : '');
         chip.textContent = code + (isSelf ? '（你）' : '');
         if (clickable) chip.onclick = () => occupantClick(code);
@@ -317,9 +336,10 @@
         let label = it.label;
         let clickable = false;
         let action = null;
+        const pendingBlocks = state.pending && !(pendingItem); // 移动/全图选择时物品不可操作
         if (pendingItem && canAct) { label = `对「${it.label}」布置陷阱`; clickable = true; action = () => itemClick(it, 'glue'); }
-        else if (it.kind === 'Chest' && canAct) { label = it.label; clickable = true; action = () => itemClick(it, 'open'); }
-        else if (it.kind === 'Medkit' && canAct) { label = '拾取医疗包'; clickable = true; action = () => itemClick(it, 'medkit'); }
+        else if (!pendingBlocks && it.kind === 'Chest' && canAct) { label = it.label; clickable = true; action = () => itemClick(it, 'open'); }
+        else if (!pendingBlocks && it.kind === 'Medkit' && canAct) { label = '拾取医疗包'; clickable = true; action = () => itemClick(it, 'medkit'); }
         b.className = 'cellitem' + (clickable ? ' clickable' : '');
         b.textContent = label;
         if (action) b.onclick = action;
@@ -429,7 +449,16 @@
     };
 
     if (v.awaitKind === 'FreeAction') {
-      btn('移动（1-3格）', '', () => appendLog({ text: '请点击目标格子（直线距离 1-3 格）。', kind: 'info', tier: 0 }));
+      btn('移动（1-3格）', '', () => {
+        state.pending = { kind: 'move', dash: false };
+        appendLog({ text: '请点击目标格子（距离 1-3 格）。', kind: 'info', tier: 0 });
+        render();
+      });
+      btn('疾走（2AP，1-5格）', '', () => {
+        state.pending = { kind: 'move', dash: true };
+        appendLog({ text: '请点击目标格子（疾走距离 1-5 格）。', kind: 'info', tier: 0 });
+        render();
+      });
       btn('探查', '', () => send({ t: 'cmd', op: 'inspect' }));
       btn('交谈/物品', '', () => appendLog({ text: '请在下方「所在格」面板点击角色或物品。', kind: 'info', tier: 0 }));
       if (state.myRoleKey === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
