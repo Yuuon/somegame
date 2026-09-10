@@ -137,6 +137,7 @@ public sealed class ViewOut
     public string Objective { get; init; } = "";
     public List<HandCardOut> Hand { get; init; } = new();
     public List<string> Effects { get; init; } = new();
+    public List<string> MedkitHints { get; init; } = new();
     public bool InBattle { get; init; }
     public string BattlePrompt { get; init; } = "";
     public List<CellOut> Cells { get; init; } = new();

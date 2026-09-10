@@ -169,6 +169,62 @@ public class FlowTests
         Assert.False(p.Hand.Any(h => h.Id == 9999001), "治疗包应被消耗");
     }
 
+    [Fact]
+    public void Bodyguard_Cover_RedirectsNpcBattle_ToGuard()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 3;
+        var g = new Game(cfg, 55, new[]
+        {
+            new SeatIn("A", true), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+        var b = g.Players.First(p => p.Role == RoleId.Bodyguard);
+        var k = g.Players.First(p => p.Role == RoleId.Killer);
+        var n = g.ProtectedNpcs[0];
+        var cell = new CellPos(1, 1);
+        b.Pos = cell;
+        n.Pos = cell;
+        k.Pos = new CellPos(1, 2);
+        k.Hand.Add(new CardInstance { Id = 555001, DefId = "gun_temp" });
+        b.CoverTargetId = n.Id;
+        g.Continue();
+
+        Assert.Contains(g.Archive, e => e.Op == "cover" && e.ActorId == b.Id); // 掩护指令被记录
+        Assert.Contains(g.Archive, e => e.Op == "battle" && e.ActorId == k.Id && e.TargetCode == b.Code); // 战斗被转移到保镖
+    }
+
+    [Fact]
+    public void Bodyguard_Injured_MedkitHintsIncludeNearbyCells()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 13;
+        cfg.Map.Height = 13;
+        cfg.Map.DecoyNpcCount = 2;
+        var g = new Game(cfg, 56, new[]
+        {
+            new SeatIn("A", false), new SeatIn("B", true), new SeatIn("C", true), new SeatIn("D", true),
+        });
+        var b = g.Players.First(p => p.Role == RoleId.Bodyguard);
+        // 找一个有医疗包的位置
+        var medCell = (CellPos?)null;
+        for (int x = 0; x < 13 && medCell == null; x++)
+            for (int y = 0; y < 13; y++)
+                if (g.ItemsAt(new CellPos(x, y)).Any(i => i.Kind == ItemKind.Medkit))
+                { medCell = new CellPos(x, y); break; }
+        Assert.NotNull(medCell);
+        b.Pos = medCell.Value;
+        b.Hp = 1; // 受伤
+        var v = g.BuildView(b);
+        Assert.NotEmpty(v.MedkitHints);
+        Assert.Contains(v.MedkitHints, h => h == $"[{medCell.Value.X},{medCell.Value.Y}]");
+
+        b.Hp = GameConfig.Default().Role("bodyguard").Hp; // 满血不提示
+        var v2 = g.BuildView(b);
+        Assert.Empty(v2.MedkitHints);
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

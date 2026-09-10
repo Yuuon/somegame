@@ -25,6 +25,7 @@ public sealed class PlayerActor : ActorNode
     public bool MovedThisRound { get; set; }
     public List<CardInstance> Hand { get; } = new();
     public int CarriedCase { get; set; } = -1; // 财宝所属案
+    public int CoverTargetId { get; set; } = -1; // 保镖当前掩护的对象（每回合重置）
     public bool IsObserver => Dead;
     public bool PubliclyHostile { get; set; }
     public bool InspectedThisRound { get; set; }

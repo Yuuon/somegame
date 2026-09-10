@@ -69,6 +69,23 @@ public partial class Game
               (p.Id == Battle.CurrentActorId ? " · 轮到你" : " · 等待对手")
             : "";
 
+        var medkitHints = new List<string>();
+        if (p.Role == RoleId.Bodyguard)
+        {
+            var maxHp = Cfg.Role("bodyguard").Hp;
+            if (p.Hp < maxHp)
+            {
+                for (int x = p.Pos.X - 2; x <= p.Pos.X + 2; x++)
+                for (int y = p.Pos.Y - 2; y <= p.Pos.Y + 2; y++)
+                {
+                    var c = new CellPos(x, y);
+                    if (InMap(c) && CellPos.Manhattan(p.Pos, c) <= 2 &&
+                        ItemsAt(c).Any(i => i.Kind == ItemKind.Medkit))
+                        medkitHints.Add($"[{x},{y}]");
+                }
+            }
+        }
+
         return new ViewOut
         {
             Seat = p.SeatIndex,
@@ -102,6 +119,7 @@ public partial class Game
                 };
             }).ToList(),
             Effects = p.Effects.Select(e => EffectLabel(e.Effect)).Where(s => s != null).Cast<string>().ToList(),
+            MedkitHints = medkitHints,
             InBattle = inBattle,
             BattlePrompt = battlePrompt,
             Cells = cells,

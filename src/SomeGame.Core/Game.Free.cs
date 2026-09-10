@@ -176,6 +176,19 @@ if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择交谈对象。"))
         PushOut(p.SeatIndex, Msg(sb.ToString()));
     }
 
+// ---------- 掩护（保镖固定指令） ----------
+    private void DoCover(PlayerActor p, FreeCmd cmd)
+    {
+        if (p.Role != RoleId.Bodyguard) { PushOut(p.SeatIndex, Msg("只有保镖能使用掩护。")); return; }
+        if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择掩护对象。")); return; }
+        var target = ActorById(cmd.ActorId.Value);
+        if (target.Dead || target.Id == p.Id || target.Pos != p.Pos)
+        { PushOut(p.SeatIndex, Msg("掩护对象须与你同格且存活。")); return; }
+        p.CoverTargetId = target.Id;
+        Log(MakeEvt(p, "cover", $"挺身掩护「{target.Code}」", "似乎在戒备什么", "有人在活动", target.Code, false, p.Pos));
+        PushOut(p.SeatIndex, Msg($"你正在掩护「{target.Code}」，其受到的攻击将转移到你身上。"));
+    }
+
     // ---------- 窃取 ----------
     private void DoSteal(PlayerActor p)
     {

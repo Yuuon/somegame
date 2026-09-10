@@ -21,6 +21,7 @@ public partial class Game
             p.FinishedFree = false;
             p.MovedThisRound = false;
             p.InspectedThisRound = false;
+            p.CoverTargetId = -1; // 掩护每回合重新指定
             SupplyRoundCard(p);
         }
         _freeQueue.Clear();
@@ -131,6 +132,7 @@ public partial class Game
             case "medkit": DoMedkit(p); break;
             case "talk": DoTalk(p, cmd); break;
             case "steal": DoSteal(p); break;
+            case "cover": DoCover(p, cmd); break;
             case "card": DoUseCard(p, cmd, false); break;
             case "inspect": InspectResult(p); break;
             case "finish": p.FinishedFree = true; break;

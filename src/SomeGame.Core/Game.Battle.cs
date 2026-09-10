@@ -13,15 +13,18 @@ public partial class Game
         ActorNode opponent = target;
         var d = CellPos.Manhattan(attacker.Pos, target.Pos);
 
+        // 掩护转移：目标受保镖"掩护"指定且保镖同格时，战斗转向保镖
+        PlayerActor? guard = null;
         if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc)
+            guard = Players.FirstOrDefault(p => !p.Dead && p.Role == RoleId.Bodyguard &&
+                p.CaseId == n.CaseId && p.Pos == n.Pos && p.CoverTargetId == n.Id);
+        if (guard == null)
+            guard = Players.FirstOrDefault(p => !p.Dead && p.Role == RoleId.Bodyguard &&
+                p.CoverTargetId == target.Id && p.Pos == target.Pos);
+        if (guard != null)
         {
-            var guard = Players.FirstOrDefault(p => !p.Dead && p.Role == RoleId.Bodyguard &&
-                p.CaseId == n.CaseId && p.Pos == n.Pos);
-            if (guard != null)
-            {
-                opponent = guard;
-                Log(ActionEvent(guard.Id, "cover", "挺身掩护贵宾，挡下了攻击", null, "有人发生冲突", guard.Code, false, n.Pos));
-            }
+            opponent = guard;
+            Log(ActionEvent(guard.Id, "cover", "挺身掩护目标，挡下了攻击", null, "有人发生冲突", guard.Code, false, target.Pos));
         }
 
         Battle = new BattleState

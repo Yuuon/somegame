@@ -14,6 +14,9 @@ public partial class Game
         // 与目标同格
         if (target != null && target.Pos == p.Pos)
         {
+            if (p.Role == RoleId.Bodyguard && target is NpcActor { Kind: ActorKind.ProtectedNpc } npc &&
+                p.CoverTargetId != npc.Id)
+                return new FreeCmd("cover", ActorId: npc.Id);
             if (p.Role == RoleId.Thief && p.CarriedCase < 0 && !p.MovedThisRound && p.Ap >= 1)
             {
                 var stealthCard = p.Hand.FirstOrDefault(h => Cfg.Card(h.DefId).Fx == CardEffect.Stealth);

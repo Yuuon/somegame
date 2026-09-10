@@ -119,6 +119,9 @@
     $('s-countdown').textContent = v.protectedCountdown;
     $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
     $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
+    if (v.medkitHints && v.medkitHints.length) {
+      $('effects').textContent += (v.effects.length ? ' ｜ ' : '') + '附近医疗包：' + v.medkitHints.join(' ');
+    }
     renderBoard(v);
     renderCellPanel(v);
     renderHand(v);
@@ -213,6 +216,12 @@
     if (code === v.myCode) { appendLog({ text: '不能对自己执行此操作。', kind: 'info', tier: 0 }); return; }
     if (state.pending) {
       const p = state.pending;
+      if (p.kind === 'cover') {
+        send({ t: 'cmd', op: 'cover', target: code });
+        state.pending = null;
+        render();
+        return;
+      }
       if (p.kind === 'checkCard' && p.defId === 'heal') {
         send({ t: 'cmd', op: 'card', cardId: p.cardId, target: code });
         state.pending = null;
@@ -257,6 +266,7 @@
     if (!me) return;
 
     const canAct = v.yourTurn;
+    const pendingCover = state.pending && state.pending.kind === 'cover';
     const pendingActor = state.pending && (state.pending.defId === 'heal' || state.pending.defId === 'mimic' || state.pending.defId === 'dye');
     const pendingItem = state.pending && state.pending.defId === 'glue';
     const showTalk = canAct && v.awaitKind === 'FreeAction';
@@ -281,7 +291,7 @@
       me.occupants.forEach(code => {
         const chip = document.createElement('button');
         const isSelf = code === v.myCode;
-        const clickable = !isSelf && canAct && (showTalk || showCheck || pendingActor);
+        const clickable = !isSelf && canAct && (showTalk || showCheck || pendingActor || pendingCover);
         chip.className = 'chip' + (clickable ? ' clickable' : '');
         chip.textContent = code + (isSelf ? '（你）' : '');
         if (clickable) chip.onclick = () => occupantClick(code);
@@ -315,7 +325,12 @@
       panel.appendChild(row);
     }
 
-    if (pendingActor) {
+    if (pendingCover) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = '点击同格角色进行掩护';
+      panel.appendChild(hint);
+    } else if (pendingActor) {
       const hint = document.createElement('div');
       hint.className = 'hint';
       hint.textContent = '请点击同格角色作为目标';
@@ -415,6 +430,13 @@
       btn('探查', '', () => send({ t: 'cmd', op: 'inspect' }));
       btn('交谈/物品', '', () => appendLog({ text: '请在下方「所在格」面板点击角色或物品。', kind: 'info', tier: 0 }));
       if (state.myRoleKey === 'thief') btn('窃取（需与目标案贵宾同格）', '', () => send({ t: 'cmd', op: 'steal' }));
+      if (state.myRoleKey === 'bodyguard') {
+        btn('掩护（0AP，选择本格角色）', '', () => {
+          state.pending = { kind: 'cover' };
+          appendLog({ text: '请点击「所在格」面板中的角色进行掩护。', kind: 'info', tier: 0 });
+          render();
+        });
+      }
       btn('结束本轮行动', 'primary', () => send({ t: 'cmd', op: 'finish' }));
     } else if (v.awaitKind === 'CheckAction') {
       btn('跳过', '', () => send({ t: 'cmd', op: 'skip' }));
