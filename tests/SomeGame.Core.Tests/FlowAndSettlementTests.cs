@@ -1,3 +1,4 @@
+using System.Reflection;
 using SomeGame.Core;
 using Xunit;
 
@@ -656,7 +657,7 @@ public class FlowTests
         Assert.Equal(1, cfg.Combat.StimKnifeBonus);
     }
 
-    private static Game GameWithOneHuman()
+    internal static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();
         cfg.Map.Width = 11;
@@ -691,5 +692,311 @@ public class FlowTests
         g.Continue();
         Assert.Equal(Stage.Free, g.Stage); // 其余座位为机器人，查验完毕后进入下一回合
         Assert.Equal(AwaitKind.FreeAction, g.Await!.Kind);
+    }
+}
+
+public class ReviewFixTests
+{
+    private static Game Roles4(bool seat0Human, long seed = 11)
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        cfg.Map.DecoyNpcCount = 2;
+        return new Game(cfg, seed, new[]
+        {
+            new SeatIn("BG", !seat0Human), new SeatIn("K", true), new SeatIn("T", true), new SeatIn("M", true),
+        }, shuffleRoles: false);
+    }
+
+    private static CellPos FarCell(Game g, CellPos from, int minDist)
+    {
+        for (int x = 0; x < g.Width; x++)
+        for (int y = 0; y < g.Height; y++)
+            if (CellPos.Manhattan(from, new CellPos(x, y)) >= minDist) return new CellPos(x, y);
+        return new CellPos(0, 0);
+    }
+
+    // ---------- P0：伪装不泄露真实敌对性 ----------
+    [Fact]
+    public void Disguise_ShowsFakeIdentity_WithoutLeakingHostility()
+    {
+        var g = Roles4(true);
+        var bg = g.Player(0);
+        var killer = g.Player(1);
+        var decoy = g.Decoys.First();
+        killer.Effects.Add(new EffectState { Effect = CardEffect.Disguise, TurnsRemaining = 1 });
+        killer.Pos = new CellPos(6, 6);
+        decoy.Pos = new CellPos(6, 6); // 格内只有平民
+        bg.Pos = new CellPos(4, 4);
+        var res = g.RevealCheck(bg, killer);
+        Assert.Equal("平民", res.Identity);
+        Assert.False(res.Enemy, "伪装成平民时不得因真实身份为杀手而标记敌对");
+        Assert.False(res.CanBattle);
+    }
+
+    [Fact]
+    public void Disguise_EnemyShown_StillAllowsBattle()
+    {
+        var g = Roles4(true);
+        var bg = g.Player(0);
+        var killer = g.Player(1);
+        var thief = g.Player(2);
+        // 其余角色全部挪走，确保格内仅剩"被伪装者 + 被冒充者"，避免随机平民干扰
+        foreach (var a in g.Actors.Where(a => a != killer && a != thief && !a.Dead))
+            a.Pos = new CellPos(0, 9);
+        killer.Effects.Add(new EffectState { Effect = CardEffect.Disguise, TurnsRemaining = 1 });
+        killer.Pos = new CellPos(6, 6);
+        thief.Pos = new CellPos(6, 6); // 被冒充为小偷（对保镖敌对）
+        bg.Pos = new CellPos(4, 4);
+        var res = g.RevealCheck(bg, killer);
+        Assert.Equal("小偷", res.Identity);
+        Assert.True(res.Enemy, "查验所见身份为敌对时仍应可开战");
+    }
+
+    // ---------- P0：撤离点坐标按需下发 ----------
+    [Fact]
+    public void Extraction_CoordsHidden_ForNonBodyguard()
+    {
+        var g = Roles4(false, 21);
+        var k = g.Player(1);
+        var v1 = g.BuildView(k);
+        Assert.Equal(-1, v1.ExtractionX);
+        Assert.Equal(-1, v1.ExtractionY);
+        typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 10 });
+        var v2 = g.BuildView(k);
+        Assert.True(v2.ExtractionVisible);
+        Assert.Equal(-1, v2.ExtractionX); // 第10回合公开后，非保镖仍不得拿到精确坐标
+        var b = g.Player(0);
+        typeof(Game).GetProperty("Round")!.GetSetMethod(true)!.Invoke(g, new object[] { 5 });
+        var vb = g.BuildView(b);
+        Assert.Equal(g.Extraction.X, vb.ExtractionX);
+        Assert.Equal(g.Extraction.Y, vb.ExtractionY);
+    }
+
+    // ---------- P1：无效出牌不扣 AP/卡 ----------
+    [Fact]
+    public void Molotov_OutOfRange_DoesNotConsume()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        var card = new CardInstance { Id = 777001, DefId = "molotov" };
+        p.Hand.Add(card);
+        int ap = p.Ap;
+        var far = FarCell(g, p.Pos, 3);
+        g.SubmitFree(0, new FreeCmd("card", CardId: card.Id, X: far.X, Y: far.Y));
+        Assert.Equal(ap, p.Ap);
+        Assert.Contains(p.Hand, h => h.Id == card.Id);
+        Assert.Contains(g.DrainOutbox(0).OfType<LogOut>(), lo => lo.Text.Contains("燃烧瓶须投掷"));
+    }
+
+    [Fact]
+    public void Drone_OutOfRange_DoesNotConsume()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        var card = new CardInstance { Id = 777002, DefId = "drone" };
+        p.Hand.Add(card);
+        int ap = p.Ap;
+        var far = FarCell(g, p.Pos, 11);
+        g.SubmitFree(0, new FreeCmd("card", CardId: card.Id, X: far.X, Y: far.Y));
+        Assert.Equal(ap, p.Ap);
+        Assert.Contains(p.Hand, h => h.Id == card.Id);
+    }
+
+    [Fact]
+    public void Glue_NoItemInCell_DoesNotConsume()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        CellPos empty = default;
+        bool found = false;
+        for (int x = 0; x < 11 && !found; x++)
+        for (int y = 0; y < 11 && !found; y++)
+        {
+            var c = new CellPos(x, y);
+            if (g.ItemsAt(c).Count == 0 && c != g.Extraction) { empty = c; found = true; }
+        }
+        Assert.True(found);
+        p.Pos = empty;
+        var card = new CardInstance { Id = 777003, DefId = "glue" };
+        p.Hand.Add(card);
+        int ap = p.Ap;
+        g.SubmitFree(0, new FreeCmd("card", CardId: card.Id));
+        Assert.Equal(ap, p.Ap);
+        Assert.Contains(p.Hand, h => h.Id == card.Id);
+    }
+
+    [Fact]
+    public void Heal_FarTarget_DoesNotConsume()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        g.Continue();
+        var p = g.Player(0);
+        var farBot = g.Players.First(x => x.IsBot);
+        farBot.Pos = FarCell(g, p.Pos, 4);
+        var card = new CardInstance { Id = 777004, DefId = "heal" };
+        p.Hand.Add(card);
+        int ap = p.Ap;
+        g.SubmitFree(0, new FreeCmd("card", CardId: card.Id, ActorId: farBot.Id));
+        Assert.Equal(ap, p.Ap);
+        Assert.Contains(p.Hand, h => h.Id == card.Id);
+    }
+
+    // ---------- P1：瞄准/隐匿在攻击结算后消耗 ----------
+    [Fact]
+    public void AimAndStealth_ConsumedOnAttack_GunHits()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        var p = g.Player(0);
+        var d = g.Player(1);
+        p.Pos = new CellPos(5, 5);
+        d.Pos = new CellPos(7, 5); // 距离2
+        d.Hand.Clear(); // 排除闪避等响应卡
+        d.Hp = 5; // 机器人角色血量不一，统一为 5 便于断言
+        var card = new CardInstance { Id = 555101, DefId = "gun_temp" };
+        p.Hand.Add(card);
+        p.Effects.Add(new EffectState { Effect = CardEffect.Aim, TurnsRemaining = 1 });
+        p.Effects.Add(new EffectState { Effect = CardEffect.Stealth, TurnsRemaining = 1 });
+        typeof(Game).GetMethod("TryStartBattle", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(g, new object[] { p, d.Id });
+        g.Continue();
+        Assert.Equal(AwaitKind.BattleAction, g.Await!.Kind);
+        g.SubmitBattleAction(0, new BattleCmd("play", 555101));
+        Assert.DoesNotContain(p.Effects, e => e.Effect == CardEffect.Aim);
+        Assert.DoesNotContain(p.Effects, e => e.Effect == CardEffect.Stealth);
+        Assert.Equal(5 - g.Cfg.Combat.GunDamage, d.Hp); // 瞄准必中
+    }
+
+    // ---------- P1：标注/掩护每回合上限 ----------
+    [Fact]
+    public void Mark_LimitedToTwoPerRound()
+    {
+        var g = Roles4(true);
+        g.Continue();
+        var p = g.Player(0);
+        g.SubmitFree(0, new FreeCmd("mark", Msg: "m1"));
+        g.SubmitFree(0, new FreeCmd("mark", Msg: "m2"));
+        g.SubmitFree(0, new FreeCmd("mark", Msg: "m3"));
+        Assert.Equal(2, g.VisibleMarkers(p).Count);
+        Assert.Contains(g.DrainOutbox(0).OfType<LogOut>(), lo => lo.Text.Contains("标注次数已用完"));
+    }
+
+    [Fact]
+    public void Cover_LimitedToOncePerRound()
+    {
+        var g = Roles4(true);
+        g.Continue();
+        var p = g.Player(0);
+        var decoy = g.Decoys.First();
+        decoy.Pos = p.Pos;
+        g.SubmitFree(0, new FreeCmd("cover", ActorId: decoy.Id));
+        Assert.True(p.CoverUsedThisRound);
+        g.SubmitFree(0, new FreeCmd("cover", ActorId: decoy.Id));
+        Assert.Contains(g.DrainOutbox(0).OfType<LogOut>(), lo => lo.Text.Contains("本回合已使用过掩护"));
+    }
+
+    // ---------- P1：万能胶可在任意可交互物品上触发 ----------
+    private static (Game g, PlayerActor p) HumanGame()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        g.Continue();
+        return (g, g.Player(0));
+    }
+
+    [Fact]
+    public void GlueTrap_OnMedkit_TriggersOnPickup()
+    {
+        var (g, p) = HumanGame();
+        CellPos cell = default;
+        Item? item = null;
+        for (int x = 0; x < 11 && item == null; x++)
+        for (int y = 0; y < 11 && item == null; y++)
+        {
+            var c = new CellPos(x, y);
+            item = g.ItemsAt(c).FirstOrDefault(i => i.Kind == ItemKind.Medkit);
+            if (item != null) cell = c;
+        }
+        Assert.NotNull(item);
+        p.Pos = cell;
+        item!.TrappedGlue = true;
+        item.TrappedById = g.Players.First(x => x.IsBot).Id;
+        p.Ap = 3;
+        g.SubmitFree(0, new FreeCmd("medkit"));
+        Assert.True(p.FinishedFree, "触发陷阱后本回合应结束");
+        Assert.Equal(0, p.Ap);
+        Assert.False(item.TrappedGlue, "陷阱应被消耗");
+        Assert.DoesNotContain(p.Hand, h => h.DefId == "medkit");
+    }
+
+    [Fact]
+    public void GlueTrap_OnInspect_Triggers()
+    {
+        var (g, p) = HumanGame();
+        CellPos cell = default;
+        Item? item = null;
+        for (int x = 0; x < 11 && item == null; x++)
+        for (int y = 0; y < 11 && item == null; y++)
+        {
+            var c = new CellPos(x, y);
+            item = g.ItemsAt(c).FirstOrDefault(i => i.Kind == ItemKind.Chest);
+            if (item != null) cell = c;
+        }
+        Assert.NotNull(item);
+        p.Pos = cell;
+        item!.TrappedGlue = true;
+        item.TrappedById = g.Players.First(x => x.IsBot).Id;
+        p.Ap = 3;
+        g.SubmitFree(0, new FreeCmd("inspect"));
+        Assert.True(p.FinishedFree, "探查到陷阱应触发粘住");
+        Assert.False(item.TrappedGlue);
+    }
+
+    [Fact]
+    public void GlueTrap_Owner_DoesNotTrigger()
+    {
+        var (g, p) = HumanGame();
+        CellPos cell = default;
+        Item? item = null;
+        for (int x = 0; x < 11 && item == null; x++)
+        for (int y = 0; y < 11 && item == null; y++)
+        {
+            var c = new CellPos(x, y);
+            item = g.ItemsAt(c).FirstOrDefault(i => i.Kind == ItemKind.Chest);
+            if (item != null) cell = c;
+        }
+        Assert.NotNull(item);
+        p.Pos = cell;
+        item!.TrappedGlue = true;
+        item.TrappedById = p.Id; // 布置者本人
+        p.Ap = 3;
+        g.SubmitFree(0, new FreeCmd("inspect"));
+        Assert.False(p.FinishedFree, "布置者本人探查不应触发");
+        Assert.True(item.TrappedGlue, "陷阱应保留给他人");
+    }
+
+    // ---------- P1：查验阶段用错卡不消耗且保留本轮 ----------
+    [Fact]
+    public void CheckCard_Invalid_KeepsTurnAndCard()
+    {
+        var g = FlowTests.GameWithOneHuman();
+        while (g.Stage == Stage.Free)
+        {
+            if (g.Await?.Kind == AwaitKind.FreeAction) g.SubmitFree(0, new FreeCmd("finish"));
+            else g.Continue();
+        }
+        Assert.Equal(Stage.Check, g.Stage);
+        var p = g.Player(0);
+        var card = new CardInstance { Id = 888002, DefId = "gun" }; // 仅战斗阶段可用
+        p.Hand.Add(card);
+        int count = p.Hand.Count;
+        g.SubmitCheck(0, new CheckCmd(Skip: false, CardId: 888002));
+        Assert.Equal(AwaitKind.CheckAction, g.Await!.Kind);
+        Assert.Equal(0, g.Await.SeatIndex);
+        Assert.Equal(count, p.Hand.Count);
+        g.SubmitCheck(0, new CheckCmd(Skip: true));
     }
 }
