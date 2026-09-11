@@ -78,10 +78,13 @@ internal sealed class Hub
                 do
                 {
                     res = await ws.ReceiveAsync(buf, CancellationToken.None);
+                    if (ms.Length + res.Count > 64 * 1024)
+                        throw new WebSocketException("message exceeds 64KB");
                     ms.Write(buf, 0, res.Count);
                 } while (!res.EndOfMessage);
 
                 if (res.MessageType == WebSocketMessageType.Close) break;
+                if (!client.AllowMessage(30)) continue; // 命令限速：超限丢弃，防刷屏
                 var text = Encoding.UTF8.GetString(ms.ToArray());
                 HandleMessage(client, text);
             }
@@ -137,7 +140,7 @@ internal sealed class Hub
 
     private void CreateRoom(Client client, JsonElement root)
     {
-        var name = Str(root, "playerName") ?? "房主";
+        var name = ClampName(Str(root, "playerName"), "房主");
         var players = Int(root, "players") ?? 4;
         if (players is not (4 or 8)) players = 4;
         var roomId = "R" + (_roomSeq++);
@@ -162,7 +165,7 @@ internal sealed class Hub
         var roomId = Str(root, "roomId");
         if (roomId == null || !_rooms.TryGetValue(roomId, out var room)) { Send(client, new InfoOut("房间不存在")); return; }
         if (room.Game != null) { Send(client, new InfoOut("对局已开始")); return; }
-        var name = Str(root, "playerName") ?? "玩家";
+        var name = ClampName(Str(root, "playerName"), "玩家");
         var idx = Array.FindIndex(room.Slots, s => s == null || (s.Bot && s.Conn == null));
         if (idx < 0) { Send(client, new InfoOut("房间已满")); return; }
         client.Name = name;
@@ -426,6 +429,12 @@ internal sealed class Hub
 
     private static string? Str(JsonElement e, string n) =>
         e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    private static string ClampName(string? s, string fallback)
+    {
+        s = (s ?? "").Trim();
+        if (s.Length == 0) s = fallback;
+        return s.Length > 24 ? s[..24] : s;
+    }
     private static int? Int(JsonElement e, string n) =>
         e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null;
     private static long? Long(JsonElement e, string n) =>
@@ -456,6 +465,19 @@ internal sealed class Client
     public byte[]? Dequeue()
     {
         lock (_lock) { return _queue.Count > 0 ? _queue.Dequeue() : null; }
+    }
+
+    private readonly object _rateLock = new();
+    private long _rateSec;
+    private int _rateCount;
+    public bool AllowMessage(int maxPerSec)
+    {
+        var now = Environment.TickCount64 / 1000;
+        lock (_rateLock)
+        {
+            if (now != _rateSec) { _rateSec = now; _rateCount = 0; }
+            return ++_rateCount <= maxPerSec;
+        }
     }
 }
 

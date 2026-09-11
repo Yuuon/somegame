@@ -249,7 +249,9 @@ public partial class Game
         PushOut(p.SeatIndex, res);
 
         var d = CellPos.Manhattan(p.Pos, target.Pos);
-        var canBattle = d <= 2 && HasRangeAttack(p, d) && CanStartBattleVs(p, target);
+        // 玩家目标以查验所见身份决定可否开战（伪装/模仿结果为准）；NPC 目标走固有规则
+        bool battleEligible = target is PlayerActor ? res.Enemy : CanStartBattleVs(p, target);
+        var canBattle = d <= 2 && HasRangeAttack(p, d) && battleEligible;
         if (!canBattle)
         {
             if (target.Kind == ActorKind.Player && res.Enemy && d > 2)
@@ -280,8 +282,9 @@ public partial class Game
 
     public CheckResultOut RevealCheck(PlayerActor verifier, ActorNode target)
     {
-        var (identity, note) = ResolveIdentity(verifier, target);
-        bool enemy = target is PlayerActor tp && IsEnemyOf(Cfg, verifier.Role, tp.Role);
+        var (identity, note, shownRole) = ResolveIdentity(verifier, target);
+        // 敌对判定以"查验所见身份"为准：伪装返回的是被冒充者的身份
+        bool enemy = shownRole is { } sr && IsEnemyOf(Cfg, verifier.Role, sr);
         // 贵宾需在场验证成功才算敌对目标（身份难辨时不可视为敌人）
         if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc && verifier.Role == RoleId.Killer)
             enemy = n.CaseId == verifier.CaseId && identity != "身份难辨";
@@ -297,7 +300,7 @@ public partial class Game
         };
     }
 
-    private (string Identity, string Note) ResolveIdentity(PlayerActor verifier, ActorNode target)
+    private (string Identity, string Note, RoleId? ShownRole) ResolveIdentity(PlayerActor verifier, ActorNode target)
     {
         if (target.Kind != ActorKind.Player)
         {
@@ -306,7 +309,7 @@ public partial class Game
             {
                 // 掩盖身份：必须在场（同格或相邻）才能验出其身份，杜绝隔空指认
                 if (CellPos.Manhattan(verifier.Pos, npc.Pos) > 1)
-                    return ("身份难辨", "距离过远，无法辨认对方身份（需接近到 1 格以内）。");
+                    return ("身份难辨", "距离过远，无法辨认对方身份（需接近到 1 格以内）。", null);
                 if (!npc.Exposed)
                 {
                     npc.Exposed = true;
@@ -315,9 +318,9 @@ public partial class Game
                     AnnounceAll(new LogOut(-1, $"「{npc.Code}」的身份暴露了——它是 {npc.CaseColor}案贵宾！", 0, null, null, "event", false));
                 }
                 else verifier.VerifiedVipCaseId = npc.CaseId;
-                return (npc.CaseColor + "案贵宾", npc.ItemIntact ? "随身财物尚在。" : "财物已被窃走。");
+                return (npc.CaseColor + "案贵宾", npc.ItemIntact ? "随身财物尚在。" : "财物已被窃走。", null);
             }
-            return ("平民", "");
+            return ("平民", "", null);
         }
         var p = (PlayerActor)target;
         var disguise = p.Effects.FirstOrDefault(e => e.Effect == CardEffect.Disguise);
@@ -328,11 +331,12 @@ public partial class Game
             {
                 var chosen = others[Rng.Next(0, others.Count)];
                 p.Effects.Remove(disguise);
-                return (IdentityLabel(chosen), $"对方使用了伪装，你看到的是「{chosen.Code}」的身份");
+                RoleId? shown = chosen is PlayerActor cp ? cp.Role : null;
+                return (IdentityLabel(chosen), $"对方使用了伪装，你看到的是「{chosen.Code}」的身份", shown);
             }
             p.Effects.Remove(disguise);
         }
-        return (RoleDisplay(p), "");
+        return (RoleDisplay(p), "", p.Role);
     }
 
     private string IdentityLabel(ActorNode a)

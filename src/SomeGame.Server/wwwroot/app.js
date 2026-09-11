@@ -19,7 +19,21 @@
     pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
     busy: false,
     inGame: false,
+    retry: true,
+    token: sessionStorage.getItem('sg_token') || makeToken(),
   };
+  sessionStorage.setItem('sg_token', state.token);
+
+  function makeToken() {
+    if (crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[ch]));
+  }
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -581,13 +595,16 @@
 
   function renderGameOver(g) {
     const box = $('overlay-box');
-    let html = `<h2>对局结束</h2><p class="hint">${g.reason}</p><ul>`;
+    // 昵称/原因来自用户输入，必须转义后再入 HTML
+    let html = `<h2>对局结束</h2><p class="hint">${esc(g.reason)}</p><ul>`;
     g.results.forEach(r => {
-      html += `<li>${r.name} ${r.bot ? '（机器人）' : ''} = ${r.role}${r.color ? `（${r.color}案）` : ''} — <b>${r.win ? '胜利' : '失败'}</b></li>`;
+      html += `<li>${esc(r.name)} ${r.bot ? '（机器人）' : ''} = ${esc(r.role)}${r.color ? `（${esc(r.color)}案）` : ''} — <b>${r.win ? '胜利' : '失败'}</b></li>`;
     });
-    html += '</ul><h3>全场身份</h3><p>' + g.reveal.join('；') + '</p>';
+    html += '</ul><h3>全场身份</h3><p>' + (g.reveal || []).map(esc).join('；') + '</p>';
     html += '<p><button id="btn-again" class="primary">返回首页</button></p>';
     box.innerHTML = html;
+    sessionStorage.removeItem('sg_ingame');
+    sessionStorage.removeItem('sg_room');
     showOverlay();
     document.getElementById('btn-again').onclick = () => location.reload();
   }

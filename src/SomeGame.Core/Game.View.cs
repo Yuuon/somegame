@@ -113,8 +113,9 @@ public partial class Game
             MapW = Width,
             MapH = Height,
             MyCode = p.Code,
-            ExtractionX = Extraction.X,
-            ExtractionY = Extraction.Y,
+            // 精确坐标仅在保镖可见时下发；其他角色即使撤离点已公开也只给模糊方位，避免改包作弊
+            ExtractionX = extractionVisible && p.Role == RoleId.Bodyguard ? Extraction.X : -1,
+            ExtractionY = extractionVisible && p.Role == RoleId.Bodyguard ? Extraction.Y : -1,
             ExtractionVisible = extractionVisible,
             ExtractionExact = extractionVisible && p.Role == RoleId.Bodyguard,
             ExtractionHint = extractionHint,
