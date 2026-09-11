@@ -192,10 +192,12 @@ public partial class Game
     private void DeclareAttack(PlayerActor attacker, ActorNode defender, string cardDefId, bool ranged)
     {
         var b = Battle!;
-        _pending = new PendingAttack(attacker, defender, ranged, cardDefId);
-
+        // 捕获本次攻击生效的瞄准/隐匿状态（结算后即消耗，不能跨次复用）
         var aim = HasEffect(attacker, CardEffect.Aim);
         if (aim) RemoveEffects(attacker, CardEffect.Aim);
+        var stealth = HasEffect(attacker, CardEffect.Stealth);
+        if (stealth) RemoveEffects(attacker, CardEffect.Stealth);
+        _pending = new PendingAttack(attacker, defender, ranged, cardDefId, aim, stealth);
 
         if (defender is PlayerActor d)
         {
@@ -271,9 +273,8 @@ public partial class Game
         {
             int rolls = HasEffect(attacker, CardEffect.RapidFire) ? 3 : 1;
             if (rolls == 3) RemoveEffects(attacker, CardEffect.RapidFire);
-            bool aim = HasEffect(attacker, CardEffect.Aim);
-            if (aim) RemoveEffects(attacker, CardEffect.Aim);
-            int threshold = GunThreshold(attacker, defender);
+            bool aim = pa.Aim;
+            int threshold = GunThreshold(attacker, defender, pa.AttackerStealth);
             int hits = 0;
             var desc = new List<string>();
             for (int i = 0; i < rolls; i++)
@@ -312,12 +313,12 @@ public partial class Game
         }
     }
 
-    private int GunThreshold(PlayerActor attacker, ActorNode defender)
+    private int GunThreshold(PlayerActor attacker, ActorNode defender, bool attackerStealth)
     {
         int t = 2;
         if (Occupants(defender.Pos).Count > 1) t++;
         if (ItemsAt(defender.Pos).Any(i => i.Kind == ItemKind.Cover)) t++;
-        if (!HasEffect(attacker, CardEffect.Stealth)) t++;
+        if (!attackerStealth) t++;
         if (defender is PlayerActor pd && HasEffect(pd, CardEffect.Stim)) t++;
         return Math.Clamp(t, 2, 6);
     }
@@ -370,12 +371,15 @@ public sealed record DefenseCmd(bool Dodge, long? CardId = null);
 
 internal sealed class PendingAttack
 {
-    public PendingAttack(PlayerActor attacker, ActorNode defender, bool ranged, string cardDefId)
+    public PendingAttack(PlayerActor attacker, ActorNode defender, bool ranged, string cardDefId, bool aim, bool attackerStealth)
     {
         Attacker = attacker; Defender = defender; Ranged = ranged; CardDefId = cardDefId;
+        Aim = aim; AttackerStealth = attackerStealth;
     }
     public PlayerActor Attacker { get; }
     public ActorNode Defender { get; }
     public bool Ranged { get; }
     public string CardDefId { get; }
+    public bool Aim { get; }
+    public bool AttackerStealth { get; }
 }

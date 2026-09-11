@@ -22,6 +22,8 @@ public partial class Game
             p.FinishedFree = false;
             p.MovedThisRound = false;
             p.InspectedThisRound = false;
+            p.MarksThisRound = 0;
+            p.CoverUsedThisRound = false;
             p.CoverTargetId = -1; // 掩护每回合重新指定
             SupplyRoundCard(p);
         }
@@ -234,7 +236,16 @@ public partial class Game
         if (cmd.CardId is { } cid)
         {
             var ci = p.Hand.FirstOrDefault(h => h.Id == cid);
-            if (ci != null) DoUseCheckCard(p, ci, cmd);
+            if (ci == null)
+            {
+                PushOut(p.SeatIndex, Msg("手中没有这张卡。"));
+            }
+            else if (!DoUseCheckCard(p, ci, cmd))
+            {
+                PushOut(p.SeatIndex, Msg($"{Cfg.Card(ci.DefId).Name} 无法在查验阶段这样使用，请重新选择。"));
+                Await = new AwaitingInfo { Kind = AwaitKind.CheckAction, SeatIndex = p.SeatIndex, Prompt = "选择查验目标，或使用查验阶段卡牌，或跳过。" };
+                return;
+            }
             NextCheckSeat();
             return;
         }

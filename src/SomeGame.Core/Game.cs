@@ -33,6 +33,7 @@ public partial class Game
     private readonly Queue<string> _discard = new();
     private long _cardSeq;
     private long _itemSeq;
+    private long _eventSeq;
     private int _nextActorId = 1;
 
     public readonly List<ActionEvt> Archive = new();
@@ -161,7 +162,12 @@ public partial class Game
         return c;
     }
 
-    public void AnnounceAll(object msg) => PushAll(msg);
+    public void AnnounceAll(object msg)
+    {
+        // 兼容字符串公告：统一包装为日志事件，避免前端收到无 type 的裸字符串
+        if (msg is string s) msg = new LogOut(-1, s, 0, null, null, "event", false);
+        PushAll(msg);
+    }
     private void PushAll(object msg) { foreach (var k in _outbox.Keys) _outbox[k].Add(msg); }
     private void PushOut(int seat, object msg) { if (_outbox.TryGetValue(seat, out var l)) l.Add(msg); }
     private void PushOutOthers(int actorId, object msg)
@@ -327,7 +333,7 @@ public partial class Game
     // ---------- 日志事件 ----------
     public void Log(ActionEvt e)
     {
-        e.Seq = (long)Archive.Count + 1;
+        e.Seq = ++_eventSeq;
         Archive.Add(e);
         if (Archive.Count > 20000) Archive.RemoveAt(0); // 上限裁剪，避免长局回放日志无限增长
         var vm = new ViewMessage(e);

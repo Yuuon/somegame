@@ -104,13 +104,9 @@ public partial class Game
         if (item == null) { PushOut(p.SeatIndex, Msg("此格没有可开启的木箱。")); return; }
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
 p.Ap--;
-        if (item.TrappedGlue)
+        if (item.TrappedGlue && item.TrappedById != p.Id)
         {
-            item.TrappedGlue = false;
-            Log(MakeEvt(p, "open", "触发了木箱上的陷阱，被万能胶粘住", "碰到陷阱被粘住", "有人在木箱前停住了", null, false, p.Pos));
-            LogActorText(p, "木箱上有万能胶陷阱！本回合你无法再行动。");
-            p.Ap = 0;
-            p.FinishedFree = true;
+            TriggerGlue(p, item);
             return;
         }
         p.OpenedItems.Add(item.Id);
@@ -137,6 +133,12 @@ private void DoMedkit(PlayerActor p)
         var item = items.FirstOrDefault(i => i.Kind == ItemKind.Medkit);
         if (item == null) { PushOut(p.SeatIndex, Msg("此格没有医疗包。")); return; }
         if (p.Ap < 1) { PushOut(p.SeatIndex, Msg("行动点不足。")); return; }
+        // 万能胶可布置在任意可交互物品上：拾取被布胶的医疗包同样触发
+        if (item.TrappedGlue && item.TrappedById != p.Id)
+        {
+            TriggerGlue(p, item);
+            return;
+        }
         p.Ap--;
         item.Consumed = true;
         var hidden = HasEffect(p, CardEffect.Stealth);
@@ -186,6 +188,13 @@ p.Ap--;
     {
         if (p.InspectedThisRound) { PushOut(p.SeatIndex, Msg("本回合已探查过。")); return; }
         p.InspectedThisRound = true;
+        // 探查到他人布置的万能胶陷阱 → 触发粘住（§9.2：他人探查该物品时生效）
+        var trapped = ItemsAt(p.Pos).FirstOrDefault(i => i.TrappedGlue && i.TrappedById != p.Id);
+        if (trapped != null)
+        {
+            TriggerGlue(p, trapped);
+            return;
+        }
         // 探查：指出当前格哪些可交互物品"可能有东西"（无法分辨是物品还是陷阱）
         var chests = ItemsAt(p.Pos).Where(i => i.Kind == ItemKind.Chest).ToList();
         var maybe = chests.Where(i => i.CardDefId.Length > 0 || i.TrappedGlue).ToList();
@@ -205,10 +214,12 @@ p.Ap--;
     private void DoCover(PlayerActor p, FreeCmd cmd)
     {
         if (p.Role != RoleId.Bodyguard) { PushOut(p.SeatIndex, Msg("只有保镖能使用掩护。")); return; }
+        if (p.CoverUsedThisRound) { PushOut(p.SeatIndex, Msg("本回合已使用过掩护。")); return; }
         if (cmd.ActorId == null) { PushOut(p.SeatIndex, Msg("请选择掩护对象。")); return; }
         var target = ActorById(cmd.ActorId.Value);
         if (target.Dead || target.Id == p.Id || target.Pos != p.Pos)
         { PushOut(p.SeatIndex, Msg("掩护对象须与你同格且存活。")); return; }
+        p.CoverUsedThisRound = true;
         p.CoverTargetId = target.Id;
         Log(MakeEvt(p, "cover", $"挺身掩护「{target.Code}」", "似乎在戒备什么", "有人在活动", target.Code, false, p.Pos));
         PushOut(p.SeatIndex, Msg($"你正在掩护「{target.Code}」，其受到的攻击将转移到你身上。"));
@@ -218,7 +229,9 @@ p.Ap--;
     private void DoMark(PlayerActor p, FreeCmd cmd)
     {
         if (p.CaseId < 0) { PushOut(p.SeatIndex, Msg("只有同案成员（保镖/杀手/小偷）能标注。")); return; }
+        if (p.MarksThisRound >= 2) { PushOut(p.SeatIndex, Msg("本回合标注次数已用完。")); return; }
         var text = string.IsNullOrWhiteSpace(cmd.Msg) ? "标注" : cmd.Msg.Trim();
+        p.MarksThisRound++;
         _markers.Add((p.CaseId, p.Pos, p.SeatIndex, text, Round + 1));
         foreach (var q in Players.Where(x => x.CaseId == p.CaseId || x.SeatIndex == p.SeatIndex))
             PushOut(q.SeatIndex, Msg($"「{p.Code}」在{p.Pos}留下了标记：{text}"));
@@ -265,7 +278,7 @@ var hidden = TryStealthFor(p, out _);
         BroadcastVague(p.Pos, "远处似乎发生了盗窃");
     }
 
-    // ---------- 自由阶段使用卡牌 ----------
+// ---------- 自由阶段使用卡牌 ----------
     private void DoUseCard(PlayerActor p, FreeCmd cmd, bool ignore)
     {
         _ = ignore;
@@ -278,10 +291,67 @@ var hidden = TryStealthFor(p, out _);
             PushOut(p.SeatIndex, Msg($"{def.Name} 不能在自由行动阶段使用。"));
             return;
         }
+        // 先验证目标/参数合法性，再扣 AP 与消耗卡，避免无效操作白扣资源
+        if (ValidateFreeUse(p, def, cmd) is { } err)
+        {
+            PushOut(p.SeatIndex, Msg(err));
+            return;
+        }
         var hidden = HasEffect(p, CardEffect.Stealth) && def.Hideable;
         p.Ap--;
         ConsumeCard(p, ci);
+        if (hidden) TryStealthFor(p, out _); // 隐匿随"下一个可隐匿动作"消耗
         ApplyFreeEffect(p, def, cmd, hidden);
+    }
+
+    private string? ValidateFreeUse(PlayerActor p, CardDef def, FreeCmd cmd)
+    {
+        switch (def.Fx)
+        {
+            case CardEffect.Heal:
+                if (cmd.ActorId is { } hid)
+                {
+                    var t = ActorById(hid);
+                    if (t.Dead || t.Pos != p.Pos) return "治疗对象须与你同格且存活。";
+                }
+                return null;
+            case CardEffect.Molotov:
+            {
+                var cell = new CellPos(cmd.X, cmd.Y);
+                if (!InMap(cell) || CellPos.Manhattan(p.Pos, cell) > 2) return "燃烧瓶须投掷在距离 2 以内。";
+                return null;
+            }
+            case CardEffect.Drone:
+            {
+                var cell = new CellPos(cmd.X, cmd.Y);
+                if (!InMap(cell)) return "目标格不在地图上。";
+                if (CellPos.Manhattan(p.Pos, cell) > Cfg.Map.DroneRange) return $"无人机最远可探查距离为 {Cfg.Map.DroneRange} 格。";
+                return null;
+            }
+            case CardEffect.Glue:
+            {
+                var items = ItemsAt(p.Pos);
+                if (items.Count == 0) return "此格没有可布置陷阱的物品。";
+                if (cmd.ItemId is { } iid && items.All(i => i.Id != iid)) return "请选择此格中的物品布置陷阱。";
+                return null;
+            }
+            case CardEffect.Dye:
+            {
+                if (cmd.ActorId is not { } did) return "请选择同格角色作为染色目标。";
+                var t = ActorById(did);
+                if (t.Dead || t.Pos != p.Pos) return "染色目标须与你同格且存活。";
+                return null;
+            }
+            case CardEffect.Mimic:
+            {
+                if (cmd.ActorId is not { } mid) return "请选择同格角色作为模仿对象。";
+                var t = ActorById(mid);
+                if (t.Dead || t.Pos != p.Pos) return "模仿对象须与你同格且存活。";
+                return null;
+            }
+            default:
+                return null;
+        }
     }
 
     private void ApplyFreeEffect(PlayerActor p, CardDef def, FreeCmd cmd, bool hidden)
@@ -419,12 +489,24 @@ private void GrantTemp(PlayerActor p, string defId, int count)
         FleeNpcsFrom(cell, "火势");
     }
 
-    private void CastGlue(PlayerActor p, FreeCmd cmd, bool hidden)
+private void CastGlue(PlayerActor p, FreeCmd cmd, bool hidden)
     {
         var item = ItemsAt(p.Pos).FirstOrDefault(i => cmd.ItemId == null || i.Id == cmd.ItemId);
         if (item == null) { PushOut(p.SeatIndex, Msg("请选择此格中的物品布置陷阱。")); return; }
         item.TrappedGlue = true;
+        item.TrappedById = p.Id;
         Log(MakeEvt(p, "card", $"在「{item.Label}」上布置了万能胶陷阱", "似乎在摆弄物品", "有人在摆弄东西", null, hidden, p.Pos));
+    }
+
+    // 万能胶统一结算：他人探查/交互被布胶物品时触发（布置者本人不触发）
+    private void TriggerGlue(PlayerActor p, Item item)
+    {
+        item.TrappedGlue = false;
+        item.TrappedById = -1;
+        Log(MakeEvt(p, "open", "触发了物品上的陷阱，被万能胶粘住", "碰到陷阱被粘住", "有人在物品前停住了", null, false, p.Pos));
+        LogActorText(p, "物品上有万能胶陷阱！本回合你无法再行动。");
+        p.Ap = 0;
+        p.FinishedFree = true;
     }
 
 private void UseDrone(PlayerActor p, FreeCmd cmd)
@@ -459,7 +541,7 @@ private void UseDrone(PlayerActor p, FreeCmd cmd)
         _bugWatches.Add(new BugWatch(seat, cell, rounds, tier));
     }
 
-    // ---------- 查验阶段卡牌 ----------
+// ---------- 查验阶段卡牌 ----------
     private bool DoUseCheckCard(PlayerActor p, CardInstance ci, CheckCmd cmd)
     {
         var def = Cfg.Card(ci.DefId);
@@ -469,7 +551,7 @@ private void UseDrone(PlayerActor p, FreeCmd cmd)
             case CardEffect.Track:
             {
                 var cell = new CellPos(cmd.X, cmd.Y);
-                if (!InMap(cell)) return false;
+                if (!InMap(cell)) { PushOut(p.SeatIndex, Msg("目标格不在地图上。")); return false; }
                 ConsumeCard(p, ci);
                 var found = Occupants(cell).OfType<PlayerActor>()
                     .Where(x => HasEffect(x, CardEffect.Disguise) || HasEffect(x, CardEffect.Mimic)).ToList();
@@ -489,7 +571,9 @@ private void UseDrone(PlayerActor p, FreeCmd cmd)
 case CardEffect.Drone:
             {
                 var cell = new CellPos(cmd.X, cmd.Y);
-                if (!InMap(cell) || CellPos.Manhattan(p.Pos, cell) > Cfg.Map.DroneRange) return false;
+                if (!InMap(cell)) { PushOut(p.SeatIndex, Msg("目标格不在地图上。")); return false; }
+                if (CellPos.Manhattan(p.Pos, cell) > Cfg.Map.DroneRange)
+                { PushOut(p.SeatIndex, Msg($"无人机最远可探查距离为 {Cfg.Map.DroneRange} 格。")); return false; }
                 ConsumeCard(p, ci);
                 var occupants = Occupants(cell).Select(a => a.Code).ToList();
                 var items = ItemsAt(cell).Select(i => i.Label).ToList();
@@ -505,9 +589,16 @@ case CardEffect.Drone:
                 Log(MakeEvt(p, "card", "戴上了伪装", "似乎在摆弄装束", "有人在活动", null, true, p.Pos));
                 break;
             case CardEffect.Heal:
+            {
+                if (cmd.TargetActorId is { } hid)
+                {
+                    var t = ActorById(hid);
+                    if (t.Dead || t.Pos != p.Pos) { PushOut(p.SeatIndex, Msg("治疗对象须与你同格且存活。")); return false; }
+                }
                 ConsumeCard(p, ci);
                 ApplyHealTarget(p, cmd.TargetActorId, true);
                 break;
+            }
 default:
                 return false;
         }

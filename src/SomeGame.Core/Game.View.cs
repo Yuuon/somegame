@@ -142,7 +142,8 @@ public partial class Game
             BattlePrompt = battlePrompt,
             Cells = cells,
             ProtectedCountdown = extractionVisible
-                ? ProtectedNpcs.Where(n => !n.Dead).Select(n => CellPos.Manhattan(n.Pos, Extraction)).DefaultIfEmpty(0).Min()
+                ? ProtectedNpcs.Where(n => !n.Dead && (p.CaseId < 0 || n.CaseId == p.CaseId))
+                    .Select(n => CellPos.Manhattan(n.Pos, Extraction)).DefaultIfEmpty(0).Min()
                 : -1,
         };
     }

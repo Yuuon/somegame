@@ -132,9 +132,10 @@ internal sealed class Hub
                     ar.LastActivity = DateTime.UtcNow;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 解析/处理异常不中断连接，忽略坏消息
+            // 解析/处理异常不中断连接，忽略坏消息并留痕，避免故障静默
+            Console.Error.WriteLine($"[hub] bad message: {ex.Message}");
         }
     }
 
@@ -162,6 +163,7 @@ internal sealed class Hub
 
     private void JoinRoom(Client client, JsonElement root)
     {
+        if (client.RoomId != null) { Send(client, new InfoOut("你已在房间中，无法重复加入。")); return; }
         var roomId = Str(root, "roomId");
         if (roomId == null || !_rooms.TryGetValue(roomId, out var room)) { Send(client, new InfoOut("房间不存在")); return; }
         if (room.Game != null) { Send(client, new InfoOut("对局已开始")); return; }
@@ -282,36 +284,44 @@ internal sealed class Hub
         while (true)
         {
             await Task.Delay(150);
-            lock (_lock)
+            try
             {
-                CleanupRooms();
-                var rooms = _rooms.Values.ToArray();
-                foreach (var room in rooms)
+                lock (_lock)
                 {
-                    var g = room.Game;
-                    if (g == null || g.Terminal) continue;
-                    room.LastActivity = DateTime.UtcNow;
-                    if (g.Await == null)
+                    CleanupRooms();
+                    var rooms = _rooms.Values.ToArray();
+                    foreach (var room in rooms)
                     {
-                        g.Continue();
-                        room.ResetDeadline();
-                        FlushRoom(room);
-                        continue;
-                    }
-                    var seat = g.Await.SeatIndex;
-                    var slot = room.Slots[seat];
-                    if (slot is { Conn: null })
-                    {
-                        AutoAct(room, g);
-                        FlushRoom(room);
-                        continue;
-                    }
-                    if (DateTime.UtcNow > room.Deadline)
-                    {
-                        AutoAct(room, g);
-                        FlushRoom(room);
+                        var g = room.Game;
+                        if (g == null || g.Terminal) continue;
+                        room.LastActivity = DateTime.UtcNow;
+                        if (g.Await == null)
+                        {
+                            g.Continue();
+                            room.ResetDeadline();
+                            FlushRoom(room);
+                            continue;
+                        }
+                        var seat = g.Await.SeatIndex;
+                        var slot = room.Slots[seat];
+                        if (slot is { Conn: null })
+                        {
+                            AutoAct(room, g);
+                            FlushRoom(room);
+                            continue;
+                        }
+                        if (DateTime.UtcNow > room.Deadline)
+                        {
+                            AutoAct(room, g);
+                            FlushRoom(room);
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                // 单个异常不得杀死心跳循环，否则全部房间将停止推进
+                Console.Error.WriteLine($"[ticker] {ex}");
             }
         }
     }
@@ -458,7 +468,7 @@ internal sealed class Client
     {
         lock (_lock)
         {
-            if (_queue.Count >= 500) _queue.Clear(); // 压力下丢旧保新，内存有界且不断开
+            if (_queue.Count >= 500) _queue.Dequeue(); // 压力下丢最旧保最新，内存有界且不断开
             _queue.Enqueue(data);
         }
     }

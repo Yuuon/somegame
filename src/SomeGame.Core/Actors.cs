@@ -32,6 +32,8 @@ public sealed class PlayerActor : ActorNode
     public bool IsObserver => Dead;
     public bool PubliclyHostile { get; set; }
     public bool InspectedThisRound { get; set; }
+    public int MarksThisRound { get; set; }
+    public bool CoverUsedThisRound { get; set; }
 }
 
 public sealed class NpcActor : ActorNode
@@ -73,6 +75,7 @@ public sealed class Item
     public long? CardContentId { get; set; }       // Chest 内含卡牌
     public string CardDefId { get; set; } = "";    // Chest 内含卡牌 def
     public bool TrappedGlue { get; set; }
+    public int TrappedById { get; set; } = -1;      // 万能胶布置者（-1 视为任何人）
     public bool Consumed { get; set; }
     public string Label => Kind switch
     {
