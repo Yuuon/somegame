@@ -34,6 +34,7 @@ internal sealed class Hub
     private readonly JsonSerializerOptions _opt;
     private readonly Dictionary<string, Room> _rooms = new();
     private readonly List<Client> _clients = new();
+    private readonly Dictionary<string, (string RoomId, int Seat)> _sessions = new();
     private readonly object _lock = new();
     private long _roomSeq;
 
@@ -124,6 +125,9 @@ internal sealed class Hub
                     case "start":
                         StartRoom(client);
                         break;
+                    case "rejoin":
+                        RejoinRoom(client, root);
+                        break;
                     case "cmd":
                         HandleCmd(client, root);
                         break;
@@ -150,6 +154,8 @@ internal sealed class Hub
         client.Name = name;
         client.RoomId = roomId;
         client.Seat = 0;
+        client.Token = Str(root, "token") ?? Guid.NewGuid().ToString("N");
+        _sessions[client.Token] = (roomId, 0);
         room.HostConn = client;
         room.Slots[0] = new Slot(name, client, false);
         Send(client, new LobbyOut
@@ -173,8 +179,29 @@ internal sealed class Hub
         client.Name = name;
         client.RoomId = roomId;
         client.Seat = idx;
+        client.Token = Str(root, "token") ?? Guid.NewGuid().ToString("N");
+        _sessions[client.Token] = (roomId, idx);
         room.Slots[idx] = new Slot(name, client, false);
         BroadcastLobby(room);
+    }
+
+    private void RejoinRoom(Client client, JsonElement root)
+    {
+        var token = Str(root, "token");
+        if (token == null || !_sessions.TryGetValue(token, out var s)) { Send(client, new InfoOut("无法重连：会话不存在")); return; }
+        if (!_rooms.TryGetValue(s.RoomId, out var room) || room.Game == null) { Send(client, new InfoOut("无法重连：对局不存在")); return; }
+        var slot = room.Slots[s.Seat];
+        if (slot == null || slot.Conn != null) { Send(client, new InfoOut("无法重连：座位已被占用")); return; }
+        client.Name = slot.Name;
+        client.Token = token;
+        client.RoomId = room.Id;
+        client.Seat = s.Seat;
+        slot.Conn = client;
+        slot.Bot = false;
+        room.LastActivity = DateTime.UtcNow;
+        Send(client, new InfoOut("已重新连接对局。"));
+        if (room.LastOver != null) Send(client, room.LastOver);
+        if (room.LastView[s.Seat] is { } v) Send(client, v);
     }
 
     private void StartRoom(Client client)
@@ -334,10 +361,22 @@ internal sealed class Hub
         {
             if (!_rooms.TryGetValue(id, out var r)) continue;
             if (r.Game != null && r.Game.Terminal && now - r.LastActivity > TimeSpan.FromMinutes(5))
+            {
                 _rooms.Remove(id);
+                RemoveSessionsOfRoom(id);
+            }
             else if (r.Game == null && r.Slots.All(s => s?.Conn == null) && now - r.LastActivity > TimeSpan.FromMinutes(2))
+            {
                 _rooms.Remove(id);
+                RemoveSessionsOfRoom(id);
+            }
         }
+    }
+
+    private void RemoveSessionsOfRoom(string roomId)
+    {
+        foreach (var kv in _sessions.Where(kv => kv.Value.RoomId == roomId).ToList())
+            _sessions.Remove(kv.Key);
     }
 
     private void AutoAct(Room room, Game g)
@@ -380,6 +419,7 @@ internal sealed class Hub
                     v.DeadlineEpochMs = new DateTimeOffset(room.Deadline).ToUnixTimeMilliseconds();
                     room.LastView[i] = v;
                 }
+                else if (m is GameOverOut go) room.LastOver = go;
                 Send(c, m);
             }
         }
@@ -405,11 +445,14 @@ internal sealed class Hub
         if (client.Seat == null) return;
         if (client == room.HostConn) room.HostConn = null; // 房主离开后其他人可接管开局
         var slot = room.Slots[client.Seat.Value];
-        if (slot == null) return;
         if (room.Game != null)
         {
-            slot.Conn = null;
-            slot.Bot = true;
+            // 对局中断线保留座位与会话，支持按 token 重连；重连前座位由 Ticker 自动托管
+            if (slot != null)
+            {
+                slot.Conn = null;
+                slot.Bot = true;
+            }
             var g = room.Game;
             if (g.Await?.SeatIndex == client.Seat.Value)
             {
@@ -420,6 +463,7 @@ internal sealed class Hub
         else
         {
             room.Slots[client.Seat.Value] = null;
+            if (client.Token.Length > 0) _sessions.Remove(client.Token);
             BroadcastLobby(room);
         }
         client.RoomId = null;
@@ -460,6 +504,7 @@ internal sealed class Client
     public string Name { get; set; } = "";
     public string? RoomId { get; set; }
     public int? Seat { get; set; }
+    public string Token { get; set; } = "";
     public bool Dead { get; set; }
 
     private readonly object _lock = new();
@@ -522,6 +567,7 @@ internal sealed class Room
     public DateTime LastActivity { get; set; }
     public int DecisionMs { get; set; } = 60000;
     public ViewOut[] LastView { get; }
+    public GameOverOut? LastOver { get; set; }
     public void ResetDeadline() => Deadline = DateTime.UtcNow.AddMilliseconds(DecisionMs);
 }
 

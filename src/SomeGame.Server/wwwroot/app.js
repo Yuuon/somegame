@@ -16,6 +16,7 @@
     myColor: '',
     myCode: '',
     host: false,
+    roomId: '',
     pending: null, // {kind:'freeCard'|'checkCard', cardId, defId}
     busy: false,
     inGame: false,
@@ -39,8 +40,18 @@
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
     state.ws = ws;
+    ws.onopen = () => {
+      // 断线/刷新后凭 token 自动重连已开始的对局
+      if (sessionStorage.getItem('sg_ingame') === '1') send({ t: 'rejoin', token: state.token });
+    };
     ws.onmessage = (ev) => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
-    ws.onclose = () => { $('overlay-box').innerHTML = '<h2>连接断开</h2><p>请刷新页面重试。</p>'; showOverlay(); };
+    ws.onclose = () => {
+      state.ws = null;
+      if (sessionStorage.getItem('sg_ingame') !== '1' || !state.retry) return; // 未在对局中/重连已放弃则不打扰
+      $('overlay-box').innerHTML = '<h2>连接断开</h2><p>正在尝试重连…</p>';
+      showOverlay();
+      setTimeout(() => connect(), 1500);
+    };
   }
 
   function send(obj) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj)); }
@@ -55,10 +66,17 @@
     switch (msg.type) {
       case 'lobby':
         state.host = msg.isHost;
+        state.roomId = msg.roomId;
+        sessionStorage.setItem('sg_room', msg.roomId);
         renderLobby(msg);
         show('wait');
         break;
       case 'info':
+        if (msg.text && msg.text.indexOf('无法重连') === 0) {
+          state.retry = false;
+          $('overlay-box').innerHTML = `<h2>无法重连</h2><p>${esc(msg.text)}</p><p><button class="primary" onclick="location.reload()">返回首页</button></p>`;
+          showOverlay();
+        }
         appendLog({ text: msg.text, kind: 'info', tier: 0 });
         break;
       case 'objective':
@@ -79,6 +97,8 @@
         state.myCode = msg.myCode;
         if (msg.objective) state.objective = msg.objective;
         state.inGame = true;
+        sessionStorage.setItem('sg_ingame', '1');
+        hideOverlay();
         show('game');
         scheduleRender();
         break;
@@ -626,11 +646,13 @@
     t: 'create',
     playerName: $('create-name').value || '房主',
     players: parseInt($('create-players').value, 10),
+    token: state.token,
   });
   $('btn-join').onclick = () => send({
     t: 'join',
     playerName: $('join-name').value || '玩家',
     roomId: $('join-room').value.trim(),
+    token: state.token,
   });
   $('btn-start').onclick = () => send({ t: 'start' });
 
