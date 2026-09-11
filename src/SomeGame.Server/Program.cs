@@ -128,6 +128,9 @@ internal sealed class Hub
                     case "rejoin":
                         RejoinRoom(client, root);
                         break;
+                    case "leave":
+                        LeaveRoom(client);
+                        break;
                     case "cmd":
                         HandleCmd(client, root);
                         break;
@@ -438,6 +441,29 @@ internal sealed class Hub
                 IsHost = c == room.HostConn,
             });
         }
+    }
+
+    private void LeaveRoom(Client client)
+    {
+        if (client.RoomId == null || !_rooms.TryGetValue(client.RoomId, out var room)) return;
+        if (client.Seat is { } seat && seat >= 0 && seat < room.Slots.Length && room.Slots[seat] is { } slot)
+        {
+            if (room.Game != null)
+            {
+                slot.Conn = null;
+                slot.Bot = true; // 对局继续，座位交由托管
+            }
+            else
+            {
+                room.Slots[seat] = null;
+                BroadcastLobby(room);
+            }
+        }
+        if (client == room.HostConn) room.HostConn = null;
+        if (client.Token.Length > 0) _sessions.Remove(client.Token); // 显式离开不可重连
+        client.RoomId = null;
+        client.Seat = null;
+        room.LastActivity = DateTime.UtcNow;
     }
 
     private void OnDisconnect(Room room, Client client)

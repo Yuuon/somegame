@@ -679,12 +679,36 @@
       html += `<li>${esc(r.name)} ${r.bot ? '（机器人）' : ''} = ${esc(r.role)}${r.color ? `（${esc(r.color)}案）` : ''} — <b>${r.win ? '胜利' : '失败'}</b></li>`;
     });
     html += '</ul><h3>全场身份</h3><p>' + (g.reveal || []).map(esc).join('；') + '</p>';
-    html += '<p><button id="btn-again" class="primary">返回首页</button></p>';
+    html += '<p><button id="btn-again" class="primary">返回大厅</button></p>';
     box.innerHTML = html;
-    sessionStorage.removeItem('sg_ingame');
-    sessionStorage.removeItem('sg_room');
     showOverlay();
-    document.getElementById('btn-again').onclick = () => location.reload();
+    document.getElementById('btn-again').onclick = () => {
+      send({ t: 'leave' });
+      sessionStorage.removeItem('sg_ingame');
+      sessionStorage.removeItem('sg_room');
+      resetToLobby();
+    };
+  }
+
+  function resetToLobby() {
+    state.pending = null;
+    state.view = null;
+    state.objective = '';
+    state.myRoleKey = '';
+    state.myCode = '';
+    state.inGame = false;
+    state.roomId = '';
+    state.host = false;
+    lastBoardSig = '';
+    $('logs').innerHTML = '';
+    $('board').innerHTML = '';
+    $('hand').innerHTML = '';
+    $('actions').innerHTML = '';
+    $('cell-panel').innerHTML = '';
+    $('turn-banner').style.display = 'none';
+    $('battle-panel').style.display = 'none';
+    hideOverlay();
+    show('lobby');
   }
 
   // ---------------- 决策倒计时 ----------------
