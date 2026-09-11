@@ -52,6 +52,15 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 #cell-panel { background:#141927; border:1px solid var(--line); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
 .cell-occupants, .cell-items { display:flex; flex-wrap:wrap; gap:6px; }
 .chip, .cellitem { border:1px solid #3a4460; background:#20263a; border-radius:14px; padding:3px 10px; font-size:12px; cursor:default; color:#c9d2e6; }
+.avatar { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:3px; vertical-align:middle; }
+.card.cat-attack { border-color:#e05a5a; }
+.card.cat-defense { border-color:#5a8ae0; }
+.card.cat-utility { border-color:#5abf6a; }
+.card.cat-identity { border-color:#b06ad8; }
+#turn-banner { background: linear-gradient(90deg, var(--ok), var(--accent)); color:#06202a; font-weight:800; border-radius:8px; padding:6px 12px; text-align:center; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+#battle-panel { background:#2a1e2c; border:1px solid #5a3340; border-radius:8px; padding:8px 10px; display:none; line-height:1.5; }
+.battle-hp { color:#ffb3c1; font-weight:600; }
 .chip.clickable, .cellitem.clickable { border-color: var(--accent); cursor:pointer; }
 .chip.clickable:hover, .cellitem.clickable:hover { background:#2f3a54; }
 #hand { display:flex; flex-wrap:wrap; gap:6px; min-height:44px; }

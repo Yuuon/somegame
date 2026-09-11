@@ -36,6 +36,41 @@
     }[ch]));
   }
 
+  const ROLE_MAX = { bodyguard: 5, killer: 3, thief: 2, madman: 4 };
+  const AVATAR_COLORS = ['#4cc9f0', '#06d6a0', '#ffd166', '#ef476f', '#b06ad8', '#f77f00', '#2ec4b6', '#8d99ae', '#e76f51', '#5390d9'];
+
+  function hashColor(code) {
+    let h = 0;
+    for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) >>> 0;
+    return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  }
+  function hpPips(hp, max) {
+    if (!max) return String(hp);
+    const h = Math.max(0, Math.min(hp, max));
+    return '❤️'.repeat(h) + '🖤'.repeat(max - h);
+  }
+  function apPips(ap) {
+    return '⚡'.repeat(Math.max(0, ap)) + '·'.repeat(Math.max(0, 3 - ap));
+  }
+  function itemEmoji(label) {
+    if (label.startsWith('木箱')) return '📦';
+    if (label.startsWith('医疗包')) return '🩹';
+    if (label.startsWith('掩体')) return '🧱';
+    return '❔';
+  }
+  function cardIcon(defId) {
+    if (defId.startsWith('gun')) return '🔫 ';
+    if (defId.startsWith('knife')) return '🔪 ';
+    if (defId === 'dodge') return '💨 ';
+    if (defId === 'shield') return '🛡️ ';
+    if (defId.startsWith('heal') || defId.startsWith('medkit')) return '❤️ ';
+    if (defId.startsWith('stealth')) return '🥷 ';
+    return '🃏 ';
+  }
+  function logIcon(kind) {
+    return { phase: '⏳', battle: '⚔️', vague: '📡', info: 'ℹ️', event: '📣', self: '🫵', card: '🃏' }[kind] || '';
+  }
+
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -120,7 +155,8 @@
   function appendLog(m) {
     const el = document.createElement('div');
     el.className = 't' + (m.tier ?? 0) + (m.kind ? ' ' + m.kind : '');
-    el.textContent = m.text;
+    const icon = logIcon(m.kind);
+    el.textContent = (icon ? icon + ' ' : '') + m.text;
     const box = $('logs');
     box.appendChild(el);
     box.scrollTop = box.scrollHeight;
@@ -148,12 +184,14 @@
     if (!v) return;
     $('s-round').textContent = v.round;
     $('s-stage').textContent = stageText(v.stage);
-    $('s-hp').textContent = v.hp;
-    $('s-ap').textContent = v.ap;
+    $('s-hp').textContent = hpPips(v.hp, ROLE_MAX[v.roleKey] || 0);
+    $('s-ap').textContent = apPips(v.ap);
     $('s-countdown').textContent = v.protectedCountdown >= 0 ? v.protectedCountdown : '?';
     const ext = $('s-extraction');
     ext.textContent = v.extractionHint || (v.extractionVisible ? '★' : '未知');
     ext.classList.toggle('revealed', !!v.extractionVisible);
+    const tb = $('turn-banner');
+    tb.style.display = v.yourTurn && !v.inBattle ? '' : 'none';
     $('objective').textContent = `${state.myRole}${state.myColor ? `（${state.myColor}案）` : ''} — ${state.objective}`;
     $('effects').textContent = v.effects.length ? '状态：' + v.effects.join('、') : '';
     if (v.medkitHints && v.medkitHints.length) {
@@ -251,7 +289,7 @@
       if (x === v.extractionX && y === v.extractionY && v.extractionExact) {
         const t = document.createElement('span');
         t.className = 'who';
-        t.textContent = '★撤离点';
+        t.textContent = '🏁撤离点';
         div.appendChild(t);
       }
       if (c.tier >= 0) {
@@ -259,7 +297,9 @@
           c.occupants.forEach(code => {
             const t = document.createElement('span');
             t.className = 'who clickable-occ';
-            t.textContent = code;
+            const crown = (v.crownCodes || []).includes(code);
+            const panic = (c.panicked || []).includes(code);
+            t.innerHTML = `<i class="avatar" style="background:${hashColor(code)}"></i>${crown ? '👑' : ''}${panic ? '😱' : ''}${code}`;
             t.onclick = (e) => {
               // 移动/选格目标时，让点击落到格子本身（多人同格也不阻挡选格）
               if (state.pending && (state.pending.kind === 'move' || isCellTarget(state.pending))) return;
@@ -272,15 +312,27 @@
         (c.items || []).forEach(it => {
           const s = document.createElement('span');
           s.className = 'item';
-          s.textContent = it;
+          s.textContent = itemEmoji(it) + ' ' + it;
           div.appendChild(s);
         });
+        if (c.burning) {
+          const s = document.createElement('span');
+          s.className = 'who';
+          s.textContent = '🔥燃烧';
+          div.appendChild(s);
+        }
+        if (c.smoky) {
+          const s = document.createElement('span');
+          s.className = 'who';
+          s.textContent = '💨烟雾';
+          div.appendChild(s);
+        }
       }
       const marker = (v.markers || []).find(m => m.x === x && m.y === y);
       if (marker) {
         const s = document.createElement('span');
         s.className = 'marker';
-        s.textContent = '▼' + marker.text;
+        s.textContent = '📍' + marker.text;
         div.appendChild(s);
       }
       const clickable = cellClickable(c, v);
@@ -416,7 +468,9 @@
         const pendingBlocks = state.pending && !(pendingActor || pendingCover); // 移动/全图选择时角色不可点
         const clickable = !isSelf && canAct && !pendingBlocks && (showTalk || showCheck || pendingActor || pendingCover);
         chip.className = 'chip' + (clickable ? ' clickable' : '');
-        chip.textContent = code + (isSelf ? '（你）' : '');
+        const crown = (v.crownCodes || []).includes(code);
+        const panic = (me.panicked || []).includes(code);
+        chip.innerHTML = `<i class="avatar" style="background:${hashColor(code)}"></i>${crown ? '👑' : ''}${panic ? '😱' : ''}${code}${isSelf ? '（你）' : ''}`;
         if (clickable) chip.onclick = () => occupantClick(code);
         row.appendChild(chip);
       });
@@ -442,7 +496,7 @@
         else if (!pendingBlocks && it.kind === 'Chest' && canAct) { label = it.label; clickable = true; action = () => itemClick(it, 'open'); }
         else if (!pendingBlocks && it.kind === 'Medkit' && canAct) { label = '拾取医疗包'; clickable = true; action = () => itemClick(it, 'medkit'); }
         b.className = 'cellitem' + (clickable ? ' clickable' : '');
-        b.textContent = label;
+        b.textContent = itemEmoji(it.label) + ' ' + label;
         if (action) b.onclick = action;
         row.appendChild(b);
       });
@@ -477,8 +531,9 @@
     box.innerHTML = '';
     (v.hand || []).forEach(c => {
       const el = document.createElement('div');
-      el.className = 'card' + (c.temp ? ' temp' : '') + (c.usable ? ' usable' : '');
-      el.textContent = c.name + (c.temp ? '（临）' : '');
+      const cat = (c.cat || '').toLowerCase();
+      el.className = 'card cat-' + cat + (c.temp ? ' temp' : '') + (c.usable ? ' usable' : '');
+      el.textContent = cardIcon(c.defId) + c.name + (c.temp ? '（临）' : '');
       if (c.usable) {
         el.onclick = () => onCardClick(c);
         if (state.pending && state.pending.cardId === c.id) el.classList.add('pending');
@@ -609,7 +664,10 @@
     const panel = $('battle-panel');
     if (v.inBattle) {
       panel.style.display = '';
-      panel.textContent = v.battlePrompt;
+      panel.innerHTML =
+        `⚔️ vs「${v.battleOpponentCode}」 距离 ${v.battleDistance} 格` +
+        `<br><span class="battle-hp">对方HP：${hpPips(v.battleOpponentHp, v.battleOpponentMaxHp)}</span>` +
+        `<br><span class="hint">${v.battlePrompt}</span>`;
     } else panel.style.display = 'none';
   }
 

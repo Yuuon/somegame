@@ -144,8 +144,13 @@ public sealed class ViewOut
     public List<string> Effects { get; init; } = new();
     public List<string> MedkitHints { get; init; } = new();
     public List<MarkerOut> Markers { get; init; } = new();
+    public List<string> CrownCodes { get; init; } = new(); // 身份已暴露的贵宾代号
     public bool InBattle { get; init; }
     public string BattlePrompt { get; init; } = "";
+    public string BattleOpponentCode { get; init; } = "";
+    public int BattleOpponentHp { get; init; }
+    public int BattleOpponentMaxHp { get; init; }
+    public int BattleDistance { get; init; }
     public List<CellOut> Cells { get; init; } = new();
     public int ProtectedCountdown { get; init; }
 }
@@ -157,6 +162,7 @@ public sealed class HandCardOut
     public string DefId { get; init; } = "";
     public bool Temp { get; init; }
     public bool Usable { get; init; }
+    public string Cat { get; init; } = "";
 }
 
 public sealed class CellOut
@@ -165,6 +171,7 @@ public sealed class CellOut
     public int Y { get; init; }
     public int Tier { get; init; }
     public List<string> Occupants { get; init; } = new();
+    public List<string> Panicked { get; init; } = new(); // 恐慌中的平民代号
     public List<string> Items { get; init; } = new();
     public List<ItemRefOut> Interactables { get; init; } = new();
     public bool Burning { get; init; }

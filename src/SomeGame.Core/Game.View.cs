@@ -24,11 +24,17 @@ public partial class Game
             var d = CellPos.Manhattan(center, c);
             int tier = p.IsObserver ? 0 : (d > 2 ? -1 : d);
             var occList = new List<string>();
+            var panicked = new List<string>();
             if (tier >= 0)
             {
                 var occ = Occupants(c);
                 if (tier <= 1 || p.IsObserver)
-                    occList.AddRange(occ.Select(a => a.Code));
+                    foreach (var a in occ)
+                    {
+                        occList.Add(a.Code);
+                        if (a is NpcActor dn && dn.Kind == ActorKind.DecoyNpc && dn.PanicTurns > 0)
+                            panicked.Add(a.Code);
+                    }
                 else if (occ.Count > 0)
                     occList.Add($"{occ.Count}人");
             }
@@ -56,6 +62,7 @@ public partial class Game
             {
                 X = x, Y = y, Tier = tier,
                 Occupants = occList,
+                Panicked = panicked,
                 Items = itemList,
                 Interactables = interactables,
                 Burning = tier >= 0 && _burn.TryGetValue(c, out var bb) && bb > 0,
@@ -70,6 +77,12 @@ public partial class Game
             ? $"战斗 vs「{opponent.Code}」 距离{Battle!.Distance} 对方HP {opponent.Hp}" +
               (p.Id == Battle.CurrentActorId ? " · 轮到你" : " · 等待对手")
             : "";
+        var oppMax = opponent switch
+        {
+            PlayerActor pp => Cfg.Role(pp.Role.ToString().ToLowerInvariant()).Hp,
+            NpcActor { Kind: ActorKind.ProtectedNpc } => Cfg.ProtectedNpcHp,
+            _ => 1,
+        };
 
         var medkitHints = new List<string>();
         if (p.Role == RoleId.Bodyguard)
@@ -133,13 +146,19 @@ public partial class Game
                     DefId = h.DefId,
                     Temp = h.Temp,
                     Usable = IsCardUsable(p, cd, opponent),
+                    Cat = cd.Cat.ToString(),
                 };
             }).ToList(),
             Effects = p.Effects.Select(e => EffectLabel(e.Effect)).Where(s => s != null).Cast<string>().ToList(),
             MedkitHints = medkitHints,
             Markers = VisibleMarkers(p),
+            CrownCodes = ProtectedNpcs.Where(n => n.Exposed).Select(n => n.Code).ToList(),
             InBattle = inBattle,
             BattlePrompt = battlePrompt,
+            BattleOpponentCode = opponent?.Code ?? "",
+            BattleOpponentHp = opponent?.Hp ?? 0,
+            BattleOpponentMaxHp = opponent != null ? oppMax : 0,
+            BattleDistance = Battle?.Distance ?? 0,
             Cells = cells,
             ProtectedCountdown = extractionVisible
                 ? ProtectedNpcs.Where(n => !n.Dead && (p.CaseId < 0 || n.CaseId == p.CaseId))
