@@ -143,6 +143,7 @@ public sealed class ViewOut
     public List<HandCardOut> Hand { get; init; } = new();
     public List<string> Effects { get; init; } = new();
     public List<string> MedkitHints { get; init; } = new();
+    public List<MarkerOut> Markers { get; init; } = new();
     public bool InBattle { get; init; }
     public string BattlePrompt { get; init; } = "";
     public List<CellOut> Cells { get; init; } = new();
@@ -175,6 +176,13 @@ public sealed class ItemRefOut
     public long Id { get; init; }
     public string Label { get; init; } = "";
     public string Kind { get; init; } = "";
+}
+
+public sealed class MarkerOut
+{
+    public int X { get; init; }
+    public int Y { get; init; }
+    public string Text { get; init; } = "";
 }
 
 public sealed class CheckResultOut

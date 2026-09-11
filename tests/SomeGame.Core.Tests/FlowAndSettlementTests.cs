@@ -601,6 +601,61 @@ public class FlowTests
         Assert.False(p.Hand.Any(h => h.Id == 888001)); // 卡被消耗
     }
 
+    [Fact]
+    public void VipCheck_RequiresProximity_ToVerify()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        var g = new Game(cfg, 5, new[]
+        {
+            new SeatIn("BG", true), new SeatIn("K", true), new SeatIn("T", true), new SeatIn("M", true),
+        }, shuffleRoles: false);
+        var k = g.Player(1); // 杀手（案0）
+        var npc = g.ProtectedOfCase(0);
+        k.Pos = new CellPos(5, 5);
+        npc.Pos = new CellPos(7, 5); // 距离2：隔空无法辨认
+        var far = g.RevealCheck(k, npc);
+        Assert.Equal("身份难辨", far.Identity);
+        Assert.False(far.Enemy);
+        Assert.Equal(-1, k.VerifiedVipCaseId);
+
+        npc.Pos = new CellPos(6, 5); // 距离1：在场可验证
+        var near = g.RevealCheck(k, npc);
+        Assert.Equal("红案贵宾", near.Identity);
+        Assert.True(near.Enemy);
+        Assert.Equal(0, k.VerifiedVipCaseId);
+    }
+
+    [Fact]
+    public void Mark_VisibleToSameCaseMembers_Only()
+    {
+        var cfg = GameConfig.Default();
+        cfg.Map.Width = 11;
+        cfg.Map.Height = 11;
+        var g = new Game(cfg, 6, new[]
+        {
+            new SeatIn("BG", false), new SeatIn("K", true), new SeatIn("T", true), new SeatIn("M", true),
+        }, shuffleRoles: false);
+        g.Continue();
+        var b = g.Player(0);
+        b.Pos = new CellPos(4, 4);
+        g.SubmitFree(0, new FreeCmd("mark", Msg: "这里有情况"));
+        var k = g.Player(1);
+        Assert.Contains(g.VisibleMarkers(k), m => m.X == 4 && m.Y == 4 && m.Text.Contains("这里有情况"));
+        var mad = g.Player(3);
+        Assert.DoesNotContain(g.VisibleMarkers(mad), m => m.X == 4 && m.Y == 4); // 疯子无同案，不可见
+    }
+
+    [Fact]
+    public void Combat_Defaults_Configured()
+    {
+        var cfg = GameConfig.Default();
+        Assert.Equal(2, cfg.Combat.GunDamage);
+        Assert.Equal(2, cfg.Combat.KnifeDamage);
+        Assert.Equal(1, cfg.Combat.StimKnifeBonus);
+    }
+
     private static Game GameWithOneHuman()
     {
         var cfg = GameConfig.Default();

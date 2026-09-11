@@ -129,6 +129,7 @@ public partial class Game
 
     private void StepCellsTimers()
     {
+        _markers.RemoveAll(m => m.ExpiresRound < Round);
         foreach (var k in _smoke.Keys.ToList())
         {
             _smoke[k]--;

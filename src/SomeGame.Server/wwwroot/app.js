@@ -144,7 +144,8 @@
     const pSig = (p.kind || '') + (p.dash ? 'd' : '') + (p.defId || '');
     return (v.x + ',' + v.y + '|' + v.round + '|' + v.extractionExact + '|' + pSig + '|' +
       (v.cells || []).map(c => c.x + ',' + c.y + ':' + c.tier + ':' +
-        (c.occupants || []).join('/') + ':' + (c.items || []).join('/')).join(';'));
+        (c.occupants || []).join('/') + ':' + (c.items || []).join('/')).join(';') +
+      '|' + (v.markers || []).map(m => m.x + ',' + m.y + ':' + m.text).join(';'));
   }
   // 多条 view 在短时间内到达时合并为一次渲染（setTimeout 保证后台也执行）
   function scheduleRender() {
@@ -180,11 +181,33 @@
     const cells = v.cells || [];
     const maxX = Math.max(...cells.map(c => c.x), 0);
     const maxY = Math.max(...cells.map(c => c.y), 0);
-    board.style.gridTemplateColumns = `repeat(${maxX + 1}, var(--cellsize))`;
+    board.style.gridTemplateColumns = `24px repeat(${maxX + 1}, var(--cellsize))`;
     board.innerHTML = '';
     const byKey = {};
     cells.forEach(c => byKey[c.x + ',' + c.y] = c);
-    for (let y = 0; y <= maxY; y++) for (let x = 0; x <= maxX; x++) {
+    for (let gy = 0; gy <= maxY + 1; gy++) for (let gx = 0; gx <= maxX + 1; gx++) {
+      if (gy === 0 && gx === 0) {
+        const a = document.createElement('div');
+        a.className = 'axis';
+        a.textContent = 'X→';
+        board.appendChild(a);
+        continue;
+      }
+      if (gy === 0) {
+        const a = document.createElement('div');
+        a.className = 'axis';
+        a.textContent = gx - 1;
+        board.appendChild(a);
+        continue;
+      }
+      if (gx === 0) {
+        const a = document.createElement('div');
+        a.className = 'axis';
+        a.textContent = 'Y ' + (gy - 1);
+        board.appendChild(a);
+        continue;
+      }
+      const x = gx - 1, y = gy - 1;
       const c = byKey[x + ',' + y];
       const div = document.createElement('div');
       if (!c) { div.className = 'cell'; board.appendChild(div); continue; }
@@ -218,6 +241,13 @@
           s.textContent = it;
           div.appendChild(s);
         });
+      }
+      const marker = (v.markers || []).find(m => m.x === x && m.y === y);
+      if (marker) {
+        const s = document.createElement('span');
+        s.className = 'marker';
+        s.textContent = '▼' + marker.text;
+        div.appendChild(s);
       }
       const clickable = cellClickable(c, v);
       if (clickable) {
@@ -506,6 +536,10 @@
           appendLog({ text: '请点击「所在格」面板中的角色进行掩护。', kind: 'info', tier: 0 });
           render();
         });
+      }
+      if (['bodyguard', 'killer', 'thief'].includes(state.myRoleKey)) {
+        btn('标注（0AP）', '', () => send({ t: 'cmd', op: 'mark', msg: '标记' }));
+        btn('求援（0AP）', '', () => send({ t: 'cmd', op: 'mark', msg: '求援：请来支援' }));
       }
       btn('结束本轮行动', 'primary', () => send({ t: 'cmd', op: 'finish' }));
     } else if (v.awaitKind === 'CheckAction') {

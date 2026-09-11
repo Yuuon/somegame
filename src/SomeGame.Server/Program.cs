@@ -247,7 +247,7 @@ internal sealed class Hub
             var actor = g.Actors.FirstOrDefault(x => !x.Dead && x.Code == targetCode);
             if (actor != null) targetActor = actor.Id;
         }
-        return new FreeCmd(op, cardId, targetActor, itemId, Int(root, "x") ?? 0, Int(root, "y") ?? 0, Bool(root, "dash"));
+        return new FreeCmd(op, cardId, targetActor, itemId, Int(root, "x") ?? 0, Int(root, "y") ?? 0, Bool(root, "dash"), Str(root, "msg"));
     }
 
     private CheckCmd BuildCheckCmd(Game g, JsonElement root)

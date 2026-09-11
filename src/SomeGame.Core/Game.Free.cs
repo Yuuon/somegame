@@ -214,6 +214,31 @@ p.Ap--;
         PushOut(p.SeatIndex, Msg($"你正在掩护「{target.Code}」，其受到的攻击将转移到你身上。"));
     }
 
+    // ---------- 标注/求援（0AP，同案可见） ----------
+    private void DoMark(PlayerActor p, FreeCmd cmd)
+    {
+        if (p.CaseId < 0) { PushOut(p.SeatIndex, Msg("只有同案成员（保镖/杀手/小偷）能标注。")); return; }
+        var text = string.IsNullOrWhiteSpace(cmd.Msg) ? "标注" : cmd.Msg.Trim();
+        _markers.Add((p.CaseId, p.Pos, p.SeatIndex, text, Round + 1));
+        foreach (var q in Players.Where(x => x.CaseId == p.CaseId || x.SeatIndex == p.SeatIndex))
+            PushOut(q.SeatIndex, Msg($"「{p.Code}」在{p.Pos}留下了标记：{text}"));
+        Log(MakeEvt(p, "mark", "在原地做了标记", "似乎在标记什么", "有人在活动", null, false, p.Pos));
+    }
+
+    private readonly List<(int CaseId, CellPos Pos, int Seat, string Text, int ExpiresRound)> _markers = new();
+
+    public List<MarkerOut> VisibleMarkers(PlayerActor p)
+    {
+        var list = new List<MarkerOut>();
+        foreach (var (caseId, pos, seat, text, exp) in _markers)
+        {
+            if (exp < Round) continue;
+            if (caseId != p.CaseId && seat != p.SeatIndex) continue;
+            list.Add(new MarkerOut { X = pos.X, Y = pos.Y, Text = text });
+        }
+        return list;
+    }
+
     // ---------- 窃取 ----------
     private void DoSteal(PlayerActor p)
     {

@@ -179,6 +179,7 @@ public partial class Game
             case "talk": DoTalk(p, cmd); break;
             case "steal": DoSteal(p); break;
             case "cover": DoCover(p, cmd); break;
+            case "mark": DoMark(p, cmd); break;
             case "card": DoUseCard(p, cmd, false); break;
             case "inspect": InspectResult(p); break;
             case "finish": p.FinishedFree = true; break;
@@ -281,8 +282,9 @@ public partial class Game
     {
         var (identity, note) = ResolveIdentity(verifier, target);
         bool enemy = target is PlayerActor tp && IsEnemyOf(Cfg, verifier.Role, tp.Role);
+        // 贵宾需在场验证成功才算敌对目标（身份难辨时不可视为敌人）
         if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc && verifier.Role == RoleId.Killer)
-            enemy = n.CaseId == verifier.CaseId;
+            enemy = n.CaseId == verifier.CaseId && identity != "身份难辨";
         var d = CellPos.Manhattan(verifier.Pos, target.Pos);
         return new CheckResultOut
         {
@@ -302,6 +304,9 @@ public partial class Game
             var npc = (NpcActor)target;
             if (npc.Kind == ActorKind.ProtectedNpc)
             {
+                // 掩盖身份：必须在场（同格或相邻）才能验出其身份，杜绝隔空指认
+                if (CellPos.Manhattan(verifier.Pos, npc.Pos) > 1)
+                    return ("身份难辨", "距离过远，无法辨认对方身份（需接近到 1 格以内）。");
                 if (!npc.Exposed)
                 {
                     npc.Exposed = true;
@@ -368,6 +373,6 @@ public partial class Game
 }
 
 public sealed record FreeCmd(string Op, long? CardId = null, int? ActorId = null, long? ItemId = null,
-    int X = 0, int Y = 0, bool Dash = false);
+    int X = 0, int Y = 0, bool Dash = false, string? Msg = null);
 public sealed record CheckCmd(bool Skip, int? TargetActorId = null, bool StartBattle = false,
     long? CardId = null, int X = 0, int Y = 0);

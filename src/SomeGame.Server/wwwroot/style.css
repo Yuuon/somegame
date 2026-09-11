@@ -36,10 +36,12 @@ button.primary { background: var(--accent); color:#06202a; font-weight:600; }
 .cell.burning { background:#4b1f16; }
 .cell.smoky { background:#37404e; }
 .cell .who { font-size:9px; color:#cfd6e6; display:block; line-height:1.15; white-space:nowrap; }
+.cell .marker { font-size:8px; color:var(--warn); display:block; line-height:1.1; white-space:nowrap; }
 .cell .who.clickable-occ { cursor:pointer; border-bottom:1px dotted #4cc9f0; }
 .cell .who.clickable-occ:hover { color:#ffffff; }
 .cell .item { font-size:9px; color:#9fb3c8; display:block; }
 .cell.clickable { cursor:pointer; }
+.axis { width:24px; font-size:9px; color:var(--dim); display:flex; align-items:center; justify-content:center; user-select:none; }
 .cell.clickable:hover { border-color: var(--accent); }
 .cell.target { border-color: var(--ok); box-shadow: 0 0 6px rgba(6,214,160,.55); }
 .cell.target:hover { background:#20302e; }

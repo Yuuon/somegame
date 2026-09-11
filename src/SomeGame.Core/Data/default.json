@@ -12,6 +12,11 @@
   },
   "protectedNpcHp": 5,
   "handSize": 5,
+  "combat": {
+    "gunDamage": 2,
+    "knifeDamage": 2,
+    "stimKnifeBonus": 1
+  },
   "turn": {
     "apPerRound": 3,
     "maxRounds": 120,

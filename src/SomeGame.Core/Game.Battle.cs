@@ -292,12 +292,19 @@ public partial class Game
             PushOut(attacker.SeatIndex, new LogOut(-1, $"枪械攻击（需求 {threshold}）：{string.Join("，", desc)}。", 0, null, null, "battle", false));
             if (defender is PlayerActor dp)
                 PushOut(dp.SeatIndex, new LogOut(-1, $"你被枪械攻击（需求 {threshold}）：{string.Join("，", desc)}。", 0, null, null, "battle", false));
-            DealDamage(attacker, defender, hits);
+            int gunDmg = hits * Cfg.Combat.GunDamage;
+            if (gunDmg > 0)
+            {
+                PushOut(attacker.SeatIndex, new LogOut(-1, $"枪械命中造成 {gunDmg} 点伤害。", 0, null, null, "battle", false));
+                if (defender is PlayerActor dp2)
+                    PushOut(dp2.SeatIndex, new LogOut(-1, $"你受到枪械伤害 {gunDmg} 点。", 0, null, null, "battle", false));
+            }
+            DealDamage(attacker, defender, gunDmg);
         }
         else
         {
-            int dmg = 1;
-            if (HasEffect(attacker, CardEffect.Stim)) dmg++;
+            int dmg = Cfg.Combat.KnifeDamage;
+            if (HasEffect(attacker, CardEffect.Stim)) dmg += Cfg.Combat.StimKnifeBonus;
             PushOut(attacker.SeatIndex, new LogOut(-1, $"刀械攻击，造成 {dmg} 点伤害。", 0, null, null, "battle", false));
             if (defender is PlayerActor dp)
                 PushOut(dp.SeatIndex, new LogOut(-1, $"你被刀械攻击，造成 {dmg} 点伤害。", 0, null, null, "battle", false));

@@ -85,7 +85,7 @@ public static class BattleSim
 
                 if (!blocked)
                 {
-                    int dmg = ResolveAttack(rng, me, opp, attack, distance, crowd);
+                    int dmg = ResolveAttack(rng, me, opp, attack, distance, crowd, cfg);
                     if (dmg > 0)
                     {
                         opp.Hp -= dmg;
@@ -137,11 +137,11 @@ public static class BattleSim
         return null;
     }
 
-    private static int ResolveAttack(IRng rng, Fighters me, Fighters defender, string attack, int distance, bool crowd)
+    private static int ResolveAttack(IRng rng, Fighters me, Fighters defender, string attack, int distance, bool crowd, GameConfig cfg)
     {
         if (attack is "knife" or "knife_temp")
         {
-            return me.Stim ? 2 : 1;
+            return me.Stim ? cfg.Combat.KnifeDamage + cfg.Combat.StimKnifeBonus : cfg.Combat.KnifeDamage;
         }
 
         int rolls = me.RapidFire ? 3 : 1;
@@ -162,6 +162,6 @@ public static class BattleSim
             int r = rng.Next(1, 7);
             if (r == 6 || (r != 1 && r >= threshold)) hits++;
         }
-        return hits;
+        return hits * cfg.Combat.GunDamage;
     }
 }

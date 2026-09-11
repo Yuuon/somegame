@@ -136,6 +136,7 @@ public partial class Game
             }).ToList(),
             Effects = p.Effects.Select(e => EffectLabel(e.Effect)).Where(s => s != null).Cast<string>().ToList(),
             MedkitHints = medkitHints,
+            Markers = VisibleMarkers(p),
             InBattle = inBattle,
             BattlePrompt = battlePrompt,
             Cells = cells,

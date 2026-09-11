@@ -28,10 +28,15 @@ public partial class Game
                 return new FreeCmd("talk", ActorId: npc2.Id);
             if (p.Role == RoleId.Thief && p.CarriedCase < 0 && !p.MovedThisRound && p.Ap >= 1)
             {
-                var stealthCard = p.Hand.FirstOrDefault(h => Cfg.Card(h.DefId).Fx == CardEffect.Stealth);
-                if (stealthCard != null && !HasEffect(p, CardEffect.Stealth))
-                    return new FreeCmd("card", CardId: stealthCard.Id);
-                return new FreeCmd("steal");
+                var vipNpc = target as NpcActor;
+                if (vipNpc != null && (p.VerifiedVipCaseId == vipNpc.CaseId || vipNpc.Exposed))
+                {
+                    var stealthCard = p.Hand.FirstOrDefault(h => Cfg.Card(h.DefId).Fx == CardEffect.Stealth);
+                    if (stealthCard != null && !HasEffect(p, CardEffect.Stealth))
+                        return new FreeCmd("card", CardId: stealthCard.Id);
+                    return new FreeCmd("steal");
+                }
+                // 未验出身份：不可窃取，等待查验阶段验证
             }
             var chest = ItemsAt(p.Pos).FirstOrDefault(i => i.Kind == ItemKind.Chest && i.CardDefId.Length > 0);
             if (chest != null && p.Ap >= 1 && !hasAttackCard) return new FreeCmd("open", ItemId: chest.Id);
@@ -119,17 +124,34 @@ public partial class Game
                     .OrderBy(x => CellPos.Manhattan(p.Pos, x.Pos)).FirstOrDefault();
             }
         }
+        else if (p.Role == RoleId.Thief)
+        {
+            // 小偷查验出贵宾身份后才能窃取
+            var vip = ProtectedNpcs.FirstOrDefault(n => n.CaseId == p.CaseId && !n.Dead);
+            if (vip != null && p.VerifiedVipCaseId != vip.CaseId && !vip.Exposed &&
+                CellPos.Manhattan(p.Pos, vip.Pos) <= 1)
+            {
+                var res = RevealCheck(p, vip);
+                _ = res;
+            }
+            NextCheckSeat();
+            return;
+        }
         else { NextCheckSeat(); return; }
 
         if (target == null) { NextCheckSeat(); return; }
-        // 杀手需先查验确认贵宾身份（在判定可否开战之前）
+        var d = CellPos.Manhattan(p.Pos, target.Pos);
+        // 杀手需先在场（距离<=1）查验确认贵宾身份，隔空无法验证
         if (target is NpcActor n && n.Kind == ActorKind.ProtectedNpc && p.CaseId == n.CaseId &&
             p.VerifiedVipCaseId != n.CaseId && !n.Exposed)
         {
-            var res = RevealCheck(p, target);
-            _ = res;
+            if (d <= 1)
+            {
+                var res = RevealCheck(p, target);
+                _ = res;
+            }
+            else { NextCheckSeat(); return; } // 太远无法验证，先靠近
         }
-        var d = CellPos.Manhattan(p.Pos, target.Pos);
         if (d <= 2 && CanStartBattleVs(p, target) && HasRangeAttack(p, d))
         {
             TryStartBattle(p, target.Id);

@@ -10,6 +10,7 @@ public sealed class GameConfig
     public MapCfg Map { get; set; } = new();
     public int ProtectedNpcHp { get; set; } = 5;
     public int HandSize { get; set; } = 5;
+    public CombatCfg Combat { get; set; } = new();
     public TurnCfg Turn { get; set; } = new();
     public TimerCfg TimersMs { get; set; } = new();
     public RoleDef[] Roles { get; set; } = Array.Empty<RoleDef>();
@@ -69,6 +70,13 @@ public sealed class TurnCfg
     public int MaxRounds { get; set; } = 120;
     public int RefillMapEveryNRounds { get; set; } = 3;
     public int ProtectedStepPerRound { get; set; } = 1;
+}
+
+public sealed class CombatCfg
+{
+    public int GunDamage { get; set; } = 2;
+    public int KnifeDamage { get; set; } = 2;
+    public int StimKnifeBonus { get; set; } = 1;
 }
 
 public sealed class TimerCfg
