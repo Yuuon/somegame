@@ -109,8 +109,14 @@
       case 'info':
         if (msg.text && msg.text.indexOf('无法重连') === 0) {
           state.retry = false;
-          $('overlay-box').innerHTML = `<h2>无法重连</h2><p>${esc(msg.text)}</p><p><button class="primary" onclick="location.reload()">返回首页</button></p>`;
+          $('overlay-box').innerHTML = `<h2>无法重连</h2><p>${esc(msg.text)}</p>` +
+            `<p><button class="primary" id="btn-lobby">返回大厅</button></p>`;
           showOverlay();
+          document.getElementById('btn-lobby').onclick = () => {
+            sessionStorage.removeItem('sg_ingame');
+            sessionStorage.removeItem('sg_room');
+            location.reload();
+          };
         }
         appendLog({ text: msg.text, kind: 'info', tier: 0 });
         break;
@@ -147,6 +153,9 @@
         }
         break;
       case 'gameover':
+        // 终局即解除对局标记：此后刷新不再尝试重连，直接回到大厅，避免卡在“无法重连”
+        sessionStorage.removeItem('sg_ingame');
+        sessionStorage.removeItem('sg_room');
         renderGameOver(msg);
         break;
     }

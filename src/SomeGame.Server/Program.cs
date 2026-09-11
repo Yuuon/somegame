@@ -474,7 +474,7 @@ internal sealed class Hub
         if (room.Game != null)
         {
             // 对局中断线保留座位与会话，支持按 token 重连；重连前座位由 Ticker 自动托管
-            if (slot != null)
+            if (slot != null && slot.Conn == client)
             {
                 slot.Conn = null;
                 slot.Bot = true;
